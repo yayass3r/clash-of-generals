@@ -1,0 +1,2266 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0f1a">
+<meta name="mobile-web-app-capable" content="yes">
+<title>صراع الجنرالات: الخرائط التكتيكية</title>
+<link rel="manifest" href="manifest.json">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        military: {
+          bg: '#0a0f1a',
+          panel: '#111827',
+          border: '#1e3a5f',
+          green: '#4a7c59',
+          gold: '#d4a844',
+          nav: '#0f172a',
+        }
+      }
+    }
+  }
+}
+</script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { background:#0a0f1a; color:#e2e8f0; font-family:'Segoe UI',Tahoma,Arial,sans-serif; overflow:hidden; height:100vh; height:100dvh; }
+  canvas { display:block; touch-action:none; }
+  ::-webkit-scrollbar { width:4px; }
+  ::-webkit-scrollbar-track { background:#111827; }
+  ::-webkit-scrollbar-thumb { background:#1e3a5f; border-radius:2px; }
+  .tab-btn { transition: all 0.2s; }
+  .tab-btn.active { color:#d4a844; border-top:2px solid #d4a844; }
+  .sheet-enter { animation: slideUp 0.3s ease-out; }
+  @keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  .fade-in { animation: fadeIn 0.3s ease-out; }
+  .toast-enter { animation: toastIn 0.3s ease-out; }
+  @keyframes toastIn { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
+  .pulse { animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+  @keyframes pulseBorder { 0%,100%{opacity:1;stroke-width:3} 50%{opacity:0.5;stroke-width:1} }
+  .province-btn { transition: background 0.15s; }
+  .province-btn:active { transform:scale(0.95); }
+
+  /* === Minimap === */
+  #minimapContainer { position:absolute; top:4px; right:4px; z-index:25; border:2px solid rgba(30,58,95,0.7); border-radius:6px; overflow:hidden; background:rgba(10,15,26,0.85); cursor:pointer; }
+  #minimapCanvas { display:block; }
+
+  /* === Notifications Bell === */
+  .notif-badge { position:absolute; top:-4px; right:-4px; background:#ef4444; color:white; font-size:9px; min-width:16px; height:16px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:bold; }
+
+  /* === Tutorial Overlay === */
+  .tutorial-card { min-width:85vw; max-width:340px; }
+  .tutorial-dot.active { background:#d4a844; transform:scale(1.3); }
+
+  /* === Combat Animations === */
+  @keyframes floatUp { 0%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-40px)} }
+  .float-dmg { animation: floatUp 1.2s ease-out forwards; position:absolute; pointer-events:none; font-weight:bold; text-shadow:0 1px 3px rgba(0,0,0,0.8); z-index:35; }
+
+  /* === Notification Log === */
+  #notifPanel { transition: max-height 0.3s ease-out; }
+
+  /* === Shake effect === */
+  @keyframes shake { 0%,100%{transform:translate(0)} 25%{transform:translate(-2px,1px)} 50%{transform:translate(2px,-1px)} 75%{transform:translate(-1px,2px)} }
+  .screen-shake { animation: shake 0.3s ease-out; }
+</style>
+</head>
+<body class="flex flex-col">
+
+<!-- ==================== شريط علوي ==================== -->
+<div id="topBar" class="flex items-center justify-between px-2 py-1 bg-military-panel border-b border-military-border text-xs z-30 shrink-0" style="min-height:40px">
+  <div class="flex items-center gap-1">
+    <div class="font-bold text-military-gold text-[10px] sm:text-xs truncate max-w-[70px]">⚔️ صراع الجنرالات</div>
+    <!-- زر كتم الصوت -->
+    <button onclick="toggleMute()" id="muteBtn" class="px-1.5 py-0.5 rounded text-[10px] bg-gray-700 hover:bg-gray-600" title="كتم/تشغيل الصوت">🔊</button>
+    <!-- زر الحفظ -->
+    <button onclick="manualSave()" class="px-1.5 py-0.5 rounded text-[10px] bg-gray-700 hover:bg-gray-600" title="حفظ اللعبة">💾</button>
+  </div>
+  <div class="flex flex-col items-center">
+    <span id="dateDisplay" class="text-[10px] sm:text-xs text-gray-300">اليوم ١، الشهر ١، السنة ١</span>
+    <div class="flex gap-1 mt-0.5">
+      <button onclick="setSpeed(0)" class="speed-btn px-1.5 py-0.5 rounded text-[10px] bg-gray-700 hover:bg-gray-600" id="speed0">⏸️</button>
+      <button onclick="setSpeed(1)" class="speed-btn px-1.5 py-0.5 rounded text-[10px] bg-gray-700 hover:bg-gray-600" id="speed1">▶️</button>
+      <button onclick="setSpeed(2)" class="speed-btn px-1.5 py-0.5 rounded text-[10px] bg-gray-700 hover:bg-gray-600" id="speed2">⏩</button>
+      <button onclick="setSpeed(3)" class="speed-btn px-1.5 py-0.5 rounded text-[10px] bg-gray-700 hover:bg-gray-600" id="speed3">⏩⏩</button>
+    </div>
+  </div>
+  <div class="flex items-center gap-1">
+    <!-- جرس الإشعارات -->
+    <div class="relative">
+      <button onclick="toggleNotifPanel()" class="px-1.5 py-0.5 rounded text-[10px] bg-gray-700 hover:bg-gray-600" id="bellBtn" title="سجل الإشعارات">🔔</button>
+      <span id="notifBadge" class="notif-badge hidden">0</span>
+    </div>
+    <div id="resourceBar" class="flex gap-1 text-[9px] sm:text-[10px] items-center truncate max-w-[120px] sm:max-w-[180px]">
+      <span>💰<span id="rMoney">1200</span></span>
+      <span>👥<span id="rMan">600</span></span>
+      <span>⛏️<span id="rSteel">350</span></span>
+      <span>🛢️<span id="rOil">250</span></span>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== منطقة اللعب الرئيسية ==================== -->
+<div id="gameArea" class="flex-1 relative overflow-hidden">
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Minimap -->
+  <div id="minimapContainer" onclick="handleMinimapClick(event)" style="width:150px;height:100px;">
+    <canvas id="minimapCanvas" width="150" height="100"></canvas>
+  </div>
+
+  <!-- لوحة الإشعارات -->
+  <div id="notifPanel" class="hidden absolute top-10 left-2 z-30 bg-military-panel border border-military-border rounded-lg overflow-hidden" style="width:280px;max-height:320px;">
+    <div class="flex items-center justify-between p-2 border-b border-military-border">
+      <span class="text-military-gold font-bold text-xs">🔔 سجل الإشعارات</span>
+      <button onclick="clearNotifications()" class="text-[10px] text-gray-400 hover:text-white">مسح الكل</button>
+    </div>
+    <div id="notifList" class="overflow-y-auto p-2 space-y-1" style="max-height:270px;"></div>
+  </div>
+
+  <!-- لوحة الاقتصاد -->
+  <div id="economyPanel" class="hidden absolute inset-0 bg-military-panel/95 z-20 overflow-y-auto p-3 fade-in">
+    <h2 class="text-military-gold font-bold text-lg mb-3">💰 الاقتصاد</h2>
+    <div id="econSummary" class="mb-4 text-sm"></div>
+    <h3 class="text-gray-400 text-sm mb-2">المقاطعات</h3>
+    <div id="econProvinces" class="space-y-2"></div>
+  </div>
+
+  <!-- لوحة الأبحاث -->
+  <div id="researchPanel" class="hidden absolute inset-0 bg-military-panel/95 z-20 overflow-y-auto p-3 fade-in">
+    <h2 class="text-military-gold font-bold text-lg mb-3">🔬 الأبحاث</h2>
+    <div id="techGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+  </div>
+
+  <!-- لوحة الدبلوماسية -->
+  <div id="diplomacyPanel" class="hidden absolute inset-0 bg-military-panel/95 z-20 overflow-y-auto p-3 fade-in">
+    <h2 class="text-military-gold font-bold text-lg mb-3">🤝 الدبلوماسية</h2>
+    <div id="diplomacyContent" class="text-sm space-y-4"></div>
+  </div>
+
+  <!-- لوحة البناء -->
+  <div id="buildPanel" class="hidden absolute bottom-0 left-0 right-0 bg-military-panel border-t border-military-border z-20 p-3 sheet-enter" style="max-height:50vh;overflow-y:auto">
+    <h3 class="text-military-gold font-bold mb-2">🏗️ البناء - <span id="buildProvName"></span></h3>
+    <div id="buildOptions" class="grid grid-cols-1 gap-2"></div>
+    <button onclick="closeBuildPanel()" class="mt-2 w-full py-1 bg-gray-700 rounded text-sm">إغلاق</button>
+  </div>
+
+  <!-- إشعار -->
+  <div id="toast" class="hidden absolute top-2 left-2 right-2 z-30 bg-gray-800/90 border border-military-border rounded-lg px-3 py-2 text-sm text-center toast-enter"></div>
+
+  <!-- حاوية تأثيرات القتال -->
+  <div id="combatEffectsContainer" class="absolute inset-0 pointer-events-none z-28 overflow-hidden"></div>
+
+  <!-- شاشة بداية اللعبة -->
+  <div id="startOverlay" class="absolute inset-0 z-40 bg-black/80 flex flex-col items-center justify-center fade-in">
+    <div class="text-center p-6">
+      <div class="text-4xl mb-3">⚔️</div>
+      <h1 class="text-military-gold text-2xl font-bold mb-1">صراع الجنرالات</h1>
+      <p class="text-gray-400 text-sm mb-1">الخرائط التكتيكية</p>
+      <p class="text-gray-500 text-xs mb-4">استولِ على كل المقاطعات المعادية للفوز!</p>
+      <div id="startButtons" class="space-y-2">
+        <button onclick="startNewGame()" class="block w-full px-8 py-3 bg-military-green hover:bg-green-700 text-white font-bold rounded-lg text-lg pulse">
+          🎮 لعبة جديدة
+        </button>
+        <button onclick="resumeGame()" id="resumeBtn" class="hidden block w-full px-8 py-3 bg-blue-700 hover:bg-blue-600 text-white font-bold rounded-lg text-lg">
+          📂 استئناف اللعبة المحفوظة
+        </button>
+      </div>
+      <div class="mt-4 text-gray-500 text-[10px] space-y-1">
+        <p>👇 المس مقاطعة للاختيار</p>
+        <p>👆 اسحب لتحريك الخريطة</p>
+        <p>🤏 قرّب بإصبعين</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- شاشة التعليمات (Tutorial) -->
+  <div id="tutorialOverlay" class="hidden absolute inset-0 z-45 bg-black/85 flex flex-col items-center justify-center">
+    <div class="tutorial-card bg-military-panel border border-military-border rounded-xl p-5 text-center">
+      <div id="tutorialIcon" class="text-4xl mb-3"></div>
+      <h2 id="tutorialTitle" class="text-military-gold font-bold text-lg mb-2"></h2>
+      <p id="tutorialDesc" class="text-gray-300 text-sm mb-4"></p>
+      <div class="flex justify-center gap-1 mb-4" id="tutorialDots"></div>
+      <div class="flex gap-2 justify-center">
+        <button onclick="prevTutorial()" id="tutPrevBtn" class="hidden px-4 py-2 bg-gray-700 rounded text-sm">◀ السابق</button>
+        <button onclick="nextTutorial()" id="tutNextBtn" class="px-4 py-2 bg-military-green rounded text-sm font-bold">التالي ▶</button>
+        <button onclick="skipTutorial()" class="px-4 py-2 text-gray-500 text-xs underline">تخطي</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- شاشة نهاية اللعبة -->
+  <div id="gameOverOverlay" class="hidden absolute inset-0 z-40 bg-black/85 flex flex-col items-center justify-center fade-in">
+    <div class="text-center p-6">
+      <div id="goIcon" class="text-5xl mb-3"></div>
+      <h1 id="goTitle" class="text-2xl font-bold mb-2"></h1>
+      <p id="goDesc" class="text-gray-400 text-sm mb-4"></p>
+      <div id="goStats" class="bg-military-panel/80 rounded-lg p-3 mb-4 text-xs space-y-1 text-gray-300"></div>
+      <button onclick="location.reload()" class="px-8 py-3 bg-military-green hover:bg-green-700 text-white font-bold rounded-lg text-lg">
+        🔄 إعادة اللعب
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== لوحة المقاطعة السفلية ==================== -->
+<div id="bottomSheet" class="hidden bg-military-panel border-t border-military-border z-20 sheet-enter" style="min-height:180px; max-height:45vh; overflow-y:auto">
+  <div class="p-3">
+    <div class="flex items-center justify-between mb-2">
+      <div>
+        <h3 id="bsName" class="font-bold text-sm"></h3>
+        <span id="bsTerrain" class="text-[10px] text-gray-400"></span>
+      </div>
+      <div id="bsOwner" class="text-[10px] px-2 py-0.5 rounded-full"></div>
+    </div>
+    <div id="bsGarrison" class="flex gap-3 text-xs mb-2"></div>
+    <div id="bsBuildings" class="flex flex-wrap gap-1 text-[10px] mb-2"></div>
+    <div id="bsRecruiting" class="text-[10px] text-military-gold mb-2"></div>
+    <div id="bsActions" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-2"></div>
+    <button onclick="closeBottomSheet()" class="mt-2 w-full py-1 bg-gray-700 rounded text-xs">✕ إغلاق</button>
+  </div>
+</div>
+
+<!-- ==================== شريط التنقل السفلي ==================== -->
+<div id="bottomNav" class="flex bg-military-nav border-t border-military-border z-30 shrink-0" style="min-height:48px">
+  <button onclick="switchTab('map')" class="tab-btn active flex-1 flex flex-col items-center justify-center py-1 text-[10px]" id="tabMap">
+    <span class="text-base">🗺️</span>الخريطة
+  </button>
+  <button onclick="switchTab('economy')" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[10px] text-gray-500" id="tabEconomy">
+    <span class="text-base">💰</span>الاقتصاد
+  </button>
+  <button onclick="switchTab('research')" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[10px] text-gray-500" id="tabResearch">
+    <span class="text-base">🔬</span>الأبحاث
+  </button>
+  <button onclick="switchTab('diplomacy')" class="tab-btn flex-1 flex flex-col items-center justify-center py-1 text-[10px] text-gray-500" id="tabDiplomacy">
+    <span class="text-base">🤝</span>الدبلوماسية
+  </button>
+</div>
+
+<script>
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ١. الإعدادات والثوابت (CONFIG & CONSTANTS)
+// ════════════════════════════════════════════════════════════════════
+const MAP_W = 2000, MAP_H = 1500;
+const OWNER_PLAYER = 'player', OWNER_ENEMY = 'enemy', OWNER_NEUTRAL = 'neutral';
+const SAVE_KEY = 'clash_of_generals_save';
+const TUTORIAL_KEY = 'clash_of_generals_tutorial_done';
+
+const TERRAINS = {
+  plains:    { name:'سهول',   icon:'🌾', atkMod:0,    defMod:0,    moneyMod:0,   manMod:0,   steelMod:0,   oilMod:0,   color:'#5a7a4a' },
+  hills:     { name:'تلال',   icon:'⛰️', atkMod:0,    defMod:0.2,  moneyMod:0,   manMod:0,   steelMod:0.1, oilMod:0,   color:'#6b7a5a' },
+  mountains: { name:'جبال',   icon:'🏔️', atkMod:-0.2, defMod:0.4,  moneyMod:0,   manMod:0,   steelMod:0.3, oilMod:0,   color:'#5a5a6a' },
+  desert:    { name:'صحراء',  icon:'🏜️', atkMod:0,    defMod:-0.1, moneyMod:0,   manMod:-0.1,steelMod:0,   oilMod:0.2, color:'#8a7a5a' },
+  forest:    { name:'غابة',   icon:'🌲', atkMod:-0.15,defMod:0.3,  moneyMod:0,   manMod:0.1, steelMod:0,   oilMod:0,   color:'#3a5a3a' },
+  urban:     { name:'مدن',    icon:'🏘️', atkMod:0,    defMod:0.25, moneyMod:0.3, manMod:0.2, steelMod:0.1, oilMod:0,   color:'#5a6a7a' }
+};
+
+// === Building costs reduced by 15% ===
+const BUILDINGS = {
+  factory:   { name:'مصنع',          icon:'🏭', desc:'+30% مال, +20% صلب',           costMoney:255, costSteel:170, costMan:0,   costOil:0,   effect:'money', val:0.3, val2:'steel', v2:0.2 },
+  barracks:  { name:'ثكنات',         icon:'🏠', desc:'+40% قوة بشرية',              costMoney:170, costSteel:85,  costMan:0,   costOil:0,   effect:'manpower', val:0.4 },
+  oilwell:   { name:'بئر نفط',       icon:'🛢️', desc:'+50% نفط',                   costMoney:213, costSteel:85,  costMan:0,   costOil:0,   effect:'oil', val:0.5 },
+  fort:      { name:'تحصينات',       icon:'🏰', desc:'+30% دفاع (حتى 3)',           costMoney:170, costSteel:128, costMan:0,   costOil:0,   effect:'defense', val:0.3, maxLevel:3 },
+  arms:      { name:'مصنع أسلحة',    icon:'🔫', desc:'+50% سرعة تجنيد',            costMoney:340, costSteel:255, costMan:0,   costOil:0,   effect:'recruit', val:0.5 }
+};
+
+// === Tank cost reduced to 250 ===
+const UNIT_TYPES = {
+  infantry:  { name:'المشاة',    icon:'🗡️', costMoney:100, costMan:50,  costSteel:0,  costOil:0,  atk:1,   def:1.5, hp:100, recruitTicks:2 },
+  tanks:     { name:'الدبابات',   icon:'🔥', costMoney:250, costMan:100, costSteel:100,costOil:50, atk:3,   def:2.5, hp:200, recruitTicks:5 },
+  artillery: { name:'المدفعية',   icon:'💥', costMoney:200, costMan:50,  costSteel:50, costOil:0,  atk:0.5, def:0.3, hp:80,  recruitTicks:3 }
+};
+
+const TECHS = [
+  { id:'blitz',    name:'عقيدة الحرب الخاطفة', desc:'الدبابات +30% هجوم',        cost:500, days:30, icon:'⚡', effect:'tankAtk', val:0.3 },
+  { id:'mobil',    name:'التعبئة العامة',      desc:'القوة البشرية +50%',         cost:400, days:25, icon:'🚩', effect:'manProd', val:0.5 },
+  { id:'indust',   name:'التصنيع',             desc:'المال +40%',                  cost:600, days:35, icon:'🏗️', effect:'moneyProd', val:0.4 },
+  { id:'metall',   name:'المعادن المتقدمة',     desc:'الصلب +40%',                 cost:500, days:30, icon:'⚒️', effect:'steelProd', val:0.4 },
+  { id:'drill',    name:'الحفر العميق',         desc:'النفط +40%',                 cost:450, days:25, icon:'🔩', effect:'oilProd', val:0.4 },
+  { id:'combined', name:'القتال المشترك',       desc:'فعالية المدفعية +50%',       cost:700, days:40, icon:'🎯', effect:'artEff', val:0.5 },
+  { id:'fortexp',  name:'خبرة التحصين',         desc:'الدفاع +40%',                cost:500, days:30, icon:'🛡️', effect:'defBonus', val:0.4 },
+  { id:'espion',   name:'التجسس',               desc:'كشف قوات العدو',            cost:600, days:35, icon:'👁️', effect:'espionage', val:1 }
+];
+
+const PLAYER_NAMES = ['العاصمة','الساحل الشمالي','جبال الغرب','السهول الخضراء','ميناء التجارة','وادي النهر','الحصن القديم','سهل القمح','أرض المعادن','الغابة الكثيفة','الممر الجبلي','البوابة الغربية','واحة الغرب','الضفة الجنوبية','مرتفعات القمر'];
+const ENEMY_NAMES = ['قلعة الصقر','سهول الشرق','الصحراء الحمراء','ميناء الشرق','أرض النفط','المعسكر الكبير','حصن النار','وادي الشرق','سلسلة الجبال','معبر الحديد','قاعدة الصواريخ','الحدود الشرقية','واحة الشرق','الهضبة الشرقية','ميناء الحرب'];
+const NEUTRAL_NAMES = ['واحة السلام','الممر المركزي','الأرض المتنازعة','التلال الرمادية','ممر التجارة','الوادي الذهبي','معبر الأرواح','الجسر القديم','أرض الحرية','قمة الرؤية'];
+
+const OWNER_COLORS = {
+  player: { fill:'rgba(37,99,235,0.35)', stroke:'rgba(96,165,250,0.8)', name:'الأزرق', text:'#60a5fa' },
+  enemy:  { fill:'rgba(220,38,38,0.35)', stroke:'rgba(248,113,113,0.8)', name:'الأحمر', text:'#f87171' },
+  neutral:{ fill:'rgba(107,114,128,0.25)', stroke:'rgba(156,163,175,0.5)', name:'محايد', text:'#9ca3af' }
+};
+
+// === بيانات التعليمات (Tutorial Steps) ===
+const TUTORIAL_STEPS = [
+  { icon:'⚔️', title:'مرحباً بك في صراع الجنرالات!', desc:'استولِ على كل المقاطعات المعادية للفوز بالحرب. أبني اقتصادك وجنّد جيشك بحكمة!' },
+  { icon:'👇', title:'المس مقاطعة لرؤية تفاصيلها', desc:'اضغط على أي مقاطعة في الخريطة لرؤية قواتها ومبانيها وخياراتها.' },
+  { icon:'🔨', title:'ابنِ مباني وجنّد قوات', desc:'ابنِ مصانع وثكنات لتعزيز إنتاجك. جنّد مشاة ودبابات ومدفعية للقتال.' },
+  { icon:'⚔️', title:'حرّك القوات للهجوم', desc:'اضغط "تحريك/هجوم" ثم اختر مقاطعة مجاورة. القوات تهاجم تلقائياً عند اختيار مقاطعة معادية.' },
+  { icon:'🔬', title:'أبحِث تقنيات جديدة', desc:'اذهب لتبويب الأبحاث واستثمر في التقنيات لتحسين جيشك واقتصادك.' },
+  { icon:'💰', title:'أدِر مواردك بحكمة', desc:'الموارد محدودة! خطط بعناية لتحقيق التوازن بين الاقتصاد والعسكري.' }
+];
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ٢. نظام الصوت (Web Audio API)
+// ════════════════════════════════════════════════════════════════════
+let audioCtx = null;
+let isMuted = false;
+
+function ensureAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function toggleMute() {
+  isMuted = !isMuted;
+  document.getElementById('muteBtn').textContent = isMuted ? '🔇' : '🔊';
+  if (!isMuted) ensureAudioCtx();
+}
+
+// صوت القتال - ضوضاء قصيرة + تردد منخفض
+function playCombatSound() {
+  if (isMuted) return;
+  ensureAudioCtx();
+  const now = audioCtx.currentTime;
+  // ضوضاء بيضاء
+  const bufferSize = audioCtx.sampleRate * 0.2;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+  const noiseGain = audioCtx.createGain();
+  noiseGain.gain.setValueAtTime(0.3, now);
+  noiseGain.gain.exponentialDecayToValueAtTime && noiseGain.gain.exponentialDecayToValueAtTime(0.01, now + 0.2);
+  noiseGain.gain.setValueAtTime(0.3, now);
+  noiseGain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass'; filter.frequency.value = 800;
+  noise.connect(filter); filter.connect(noiseGain); noiseGain.connect(audioCtx.destination);
+  noise.start(now); noise.stop(now + 0.2);
+  // نغمة منخفضة
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sawtooth'; osc.frequency.value = 80;
+  const oscGain = audioCtx.createGain();
+  oscGain.gain.setValueAtTime(0.2, now);
+  oscGain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+  osc.connect(oscGain); oscGain.connect(audioCtx.destination);
+  osc.start(now); osc.stop(now + 0.15);
+}
+
+// صوت إكمال التجنيد - نغمة صاعدة
+function playRecruitSound() {
+  if (isMuted) return;
+  ensureAudioCtx();
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine'; osc.frequency.setValueAtTime(440, now);
+  osc.frequency.linearRampToValueAtTime(880, now + 0.15);
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.2, now);
+  g.gain.linearRampToValueAtTime(0, now + 0.2);
+  osc.connect(g); g.connect(audioCtx.destination);
+  osc.start(now); osc.stop(now + 0.2);
+}
+
+// صوت إكمال البناء - نغمتان
+function playBuildSound() {
+  if (isMuted) return;
+  ensureAudioCtx();
+  const now = audioCtx.currentTime;
+  [523, 659].forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine'; osc.frequency.value = freq;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0, now + i * 0.12);
+    g.gain.linearRampToValueAtTime(0.2, now + i * 0.12 + 0.03);
+    g.gain.linearRampToValueAtTime(0, now + i * 0.12 + 0.2);
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.start(now + i * 0.12); osc.stop(now + i * 0.12 + 0.2);
+  });
+}
+
+// صوت إكمال الأبحاث - 3 نغمات
+function playResearchSound() {
+  if (isMuted) return;
+  ensureAudioCtx();
+  const now = audioCtx.currentTime;
+  [523, 659, 784].forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'triangle'; osc.frequency.value = freq;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0, now + i * 0.1);
+    g.gain.linearRampToValueAtTime(0.25, now + i * 0.1 + 0.03);
+    g.gain.linearRampToValueAtTime(0, now + i * 0.1 + 0.25);
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.start(now + i * 0.1); osc.stop(now + i * 0.1 + 0.25);
+  });
+}
+
+// صوت الانتصار - كورد انتصاري
+function playVictorySound() {
+  if (isMuted) return;
+  ensureAudioCtx();
+  const now = audioCtx.currentTime;
+  [523, 659, 784, 1047].forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'triangle'; osc.frequency.value = freq;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.3, now + i * 0.15);
+    g.gain.linearRampToValueAtTime(0.3, now + i * 0.15 + 0.3);
+    g.gain.linearRampToValueAtTime(0, now + i * 0.15 + 0.6);
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.start(now + i * 0.15); osc.stop(now + i * 0.15 + 0.6);
+  });
+}
+
+// صوت الهزيمة - نغمة هابطة
+function playDefeatSound() {
+  if (isMuted) return;
+  ensureAudioCtx();
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(440, now);
+  osc.frequency.linearRampToValueAtTime(110, now + 0.6);
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.2, now);
+  g.gain.linearRampToValueAtTime(0, now + 0.7);
+  osc.connect(g); g.connect(audioCtx.destination);
+  osc.start(now); osc.stop(now + 0.7);
+}
+
+// صوت الضغط على الزر
+function playClickSound() {
+  if (isMuted) return;
+  ensureAudioCtx();
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine'; osc.frequency.value = 600;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.1, now);
+  g.gain.linearRampToValueAtTime(0, now + 0.05);
+  osc.connect(g); g.connect(audioCtx.destination);
+  osc.start(now); osc.stop(now + 0.05);
+}
+
+// صوت تحريك القوات - whoosh
+function playMoveSound() {
+  if (isMuted) return;
+  ensureAudioCtx();
+  const now = audioCtx.currentTime;
+  const bufferSize = audioCtx.sampleRate * 0.15;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize) * 0.5;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.15, now);
+  g.gain.linearRampToValueAtTime(0, now + 0.15);
+  const f = audioCtx.createBiquadFilter();
+  f.type = 'bandpass'; f.frequency.setValueAtTime(1000, now);
+  f.frequency.linearRampToValueAtTime(3000, now + 0.15);
+  noise.connect(f); f.connect(g); g.connect(audioCtx.destination);
+  noise.start(now); noise.stop(now + 0.15);
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ٣. نظام الحفظ والتحميل (Save/Load System)
+// ════════════════════════════════════════════════════════════════════
+
+function saveGame() {
+  if (!gameState || !gameState.started) return;
+  const saveData = {
+    provinces: gameState.provinces.map(p => ({
+      id:p.id, name:p.name, terrain:p.terrain, owner:p.owner,
+      polygon:p.polygon, centroid:p.centroid, adjacent:p.adjacent,
+      garrison:{...p.garrison}, buildings:{...p.buildings},
+      recruiting:p.recruiting ? {...p.recruiting} : null,
+      seed:p.seed, isCapital:p.isCapital
+    })),
+    resources: {
+      player:{...gameState.resources.player},
+      enemy:{...gameState.resources.enemy}
+    },
+    tech: {
+      player:{ completed:{...gameState.tech.player.completed}, current:gameState.tech.player.current, progress:gameState.tech.player.progress },
+      enemy:{ completed:{...gameState.tech.enemy.completed}, current:gameState.tech.enemy.current, progress:gameState.tech.enemy.progress }
+    },
+    tick: gameState.tick,
+    speed: gameState.speed,
+    gameOver: gameState.gameOver,
+    income: gameState.income,
+    stats: {...(gameState.stats || {conquered:0, troopsLost:0, buildingsBuilt:0})}
+  };
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
+    return true;
+  } catch(e) { console.error('Save failed:', e); return false; }
+}
+
+function loadGame() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    gameState = createGameState();
+    gameState.provinces = data.provinces;
+    gameState.resources = data.resources;
+    gameState.tech = data.tech;
+    gameState.tick = data.tick;
+    gameState.speed = data.speed;
+    gameState.gameOver = data.gameOver;
+    gameState.income = data.income;
+    gameState.stats = data.stats || {conquered:0, troopsLost:0, buildingsBuilt:0};
+    gameState.started = true;
+    return true;
+  } catch(e) { console.error('Load failed:', e); return false; }
+}
+
+function manualSave() {
+  playClickSound();
+  if (saveGame()) showToast('💾 تم حفظ اللعبة بنجاح!');
+  else showToast('❌ فشل حفظ اللعبة!');
+}
+
+function hasSavedGame() {
+  return !!localStorage.getItem(SAVE_KEY);
+}
+
+function autoSave() {
+  if (saveGame()) {
+    showToast('💾 تم الحفظ التلقائي');
+  }
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ٤. نظام الإشعارات (Notifications Log)
+// ════════════════════════════════════════════════════════════════════
+let notifications = [];
+let unreadNotifs = 0;
+
+function addNotification(text, type='info') {
+  const day = gameState ? formatDate(gameState.tick) : '';
+  notifications.unshift({ text, type, day, time: Date.now() });
+  if (notifications.length > 50) notifications.pop();
+  unreadNotifs++;
+  updateNotifBadge();
+}
+
+function updateNotifBadge() {
+  const badge = document.getElementById('notifBadge');
+  if (unreadNotifs > 0) {
+    badge.classList.remove('hidden');
+    badge.textContent = unreadNotifs > 9 ? '9+' : unreadNotifs;
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function toggleNotifPanel() {
+  playClickSound();
+  const panel = document.getElementById('notifPanel');
+  if (panel.classList.contains('hidden')) {
+    panel.classList.remove('hidden');
+    unreadNotifs = 0;
+    updateNotifBadge();
+    renderNotifications();
+  } else {
+    panel.classList.add('hidden');
+  }
+}
+
+function renderNotifications() {
+  const list = document.getElementById('notifList');
+  if (notifications.length === 0) {
+    list.innerHTML = '<div class="text-gray-500 text-xs text-center py-4">لا توجد إشعارات</div>';
+    return;
+  }
+  const icons = { combat:'⚔️', build:'🏗️', research:'🔬', conquest:'🏴', info:'ℹ️', defeat:'💀', victory:'🏆' };
+  list.innerHTML = notifications.slice(0, 20).map(n => `
+    <div class="text-[10px] p-1.5 rounded bg-gray-800/50 border-l-2 ${n.type==='combat'?'border-red-500':n.type==='victory'?'border-green-500':n.type==='defeat'?'border-red-700':'border-gray-600'}">
+      <span class="text-gray-500">${n.day}</span> ${icons[n.type]||'ℹ️'} ${n.text}
+    </div>
+  `).join('');
+}
+
+function clearNotifications() {
+  notifications = [];
+  unreadNotifs = 0;
+  updateNotifBadge();
+  renderNotifications();
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ٥. نظام التعليمات (Tutorial System)
+// ════════════════════════════════════════════════════════════════════
+let tutorialStep = 0;
+
+function showTutorial() {
+  tutorialStep = 0;
+  document.getElementById('tutorialOverlay').classList.remove('hidden');
+  renderTutorialStep();
+}
+
+function renderTutorialStep() {
+  const step = TUTORIAL_STEPS[tutorialStep];
+  document.getElementById('tutorialIcon').textContent = step.icon;
+  document.getElementById('tutorialTitle').textContent = step.title;
+  document.getElementById('tutorialDesc').textContent = step.desc;
+  // النقاط
+  const dots = document.getElementById('tutorialDots');
+  dots.innerHTML = TUTORIAL_STEPS.map((_, i) => `<div class="tutorial-dot w-2 h-2 rounded-full ${i === tutorialStep ? 'active' : 'bg-gray-600'}"></div>`).join('');
+  // الأزرار
+  document.getElementById('tutPrevBtn').classList.toggle('hidden', tutorialStep === 0);
+  const nextBtn = document.getElementById('tutNextBtn');
+  if (tutorialStep === TUTORIAL_STEPS.length - 1) {
+    nextBtn.textContent = 'ابدأ اللعب! 🎮';
+    nextBtn.onclick = finishTutorial;
+  } else {
+    nextBtn.textContent = 'التالي ▶';
+    nextBtn.onclick = nextTutorial;
+  }
+}
+
+function nextTutorial() {
+  playClickSound();
+  if (tutorialStep < TUTORIAL_STEPS.length - 1) { tutorialStep++; renderTutorialStep(); }
+}
+
+function prevTutorial() {
+  playClickSound();
+  if (tutorialStep > 0) { tutorialStep--; renderTutorialStep(); }
+}
+
+function skipTutorial() {
+  playClickSound();
+  finishTutorial();
+}
+
+function finishTutorial() {
+  playClickSound();
+  document.getElementById('tutorialOverlay').classList.add('hidden');
+  localStorage.setItem(TUTORIAL_KEY, 'true');
+}
+
+function isTutorialDone() {
+  return localStorage.getItem(TUTORIAL_KEY) === 'true';
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ٦. تأثيرات القتال (Combat Animations)
+// ════════════════════════════════════════════════════════════════════
+let combatAnimations = []; // تأثيرات مؤقتة على الخريطة
+
+function addCombatAnimation(provId, type, text) {
+  combatAnimations.push({
+    provId, type, text,
+    startTime: Date.now(),
+    duration: type === 'flash' ? 500 : 1200
+  });
+}
+
+// تأثير ارتعاش الشاشة
+function triggerScreenShake() {
+  const area = document.getElementById('gameArea');
+  area.classList.add('screen-shake');
+  setTimeout(() => area.classList.remove('screen-shake'), 300);
+}
+
+// إظهار أرقام الضرر المتطايرة
+function showFloatingDamage(screenX, screenY, text, color) {
+  const container = document.getElementById('combatEffectsContainer');
+  const el = document.createElement('div');
+  el.className = 'float-dmg';
+  el.textContent = text;
+  el.style.left = screenX + 'px';
+  el.style.top = screenY + 'px';
+  el.style.color = color;
+  el.style.fontSize = '14px';
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 1200);
+}
+
+function updateCombatAnimations() {
+  const now = Date.now();
+  combatAnimations = combatAnimations.filter(a => now - a.startTime < a.duration);
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ٧. دوال مساعدة - هندسة ورياضيات
+// ════════════════════════════════════════════════════════════════════
+let _seed = 42;
+function seededRandom() {
+  _seed = (_seed * 16807 + 0) % 2147483647;
+  return (_seed - 1) / 2147483646;
+}
+function randInt(min, max) { return Math.floor(seededRandom() * (max - min + 1)) + min; }
+function randFloat(min, max) { return seededRandom() * (max - min) + min; }
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+function pointInPolygon(px, py, verts) {
+  let inside = false;
+  for (let i = 0, j = verts.length - 1; i < verts.length; j = i++) {
+    const xi = verts[i].x, yi = verts[i].y, xj = verts[j].x, yj = verts[j].y;
+    if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+
+function calcCentroid(verts) {
+  let cx = 0, cy = 0;
+  for (const v of verts) { cx += v.x; cy += v.y; }
+  return { x: cx / verts.length, y: cy / verts.length };
+}
+
+function lineIntersection(p1, p2, p3, p4) {
+  const d = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
+  if (Math.abs(d) < 1e-10) return null;
+  const t = ((p1.x - p3.x) * (p3.y - p4.y) - (p1.y - p3.y) * (p3.x - p4.x)) / d;
+  return { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y) };
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ٨. توليد خريطة Voronoi
+// ════════════════════════════════════════════════════════════════════
+let cachedVoronoi = null;
+
+function generateVoronoi(points) {
+  if (cachedVoronoi) return cachedVoronoi; // تخزين مؤقت
+  const margin = 200;
+  const bounds = [
+    { x: -margin, y: -margin }, { x: MAP_W + margin, y: -margin },
+    { x: MAP_W + margin, y: MAP_H + margin }, { x: -margin, y: MAP_H + margin }
+  ];
+  const polygons = [];
+  for (let i = 0; i < points.length; i++) {
+    let poly = [...bounds];
+    for (let j = 0; j < points.length; j++) {
+      if (i === j) continue;
+      const mx = (points[i].x + points[j].x) / 2, my = (points[i].y + points[j].y) / 2;
+      const dx = points[j].x - points[i].x, dy = points[j].y - points[i].y;
+      const len = Math.hypot(dx, dy);
+      const nx = -dy / len * 5000, ny = dx / len * 5000;
+      const la = { x: mx - nx, y: my - ny }, lb = { x: mx + nx, y: my + ny };
+      const newPoly = [];
+      const n = poly.length;
+      for (let k = 0; k < n; k++) {
+        const curr = poly[k], next = poly[(k + 1) % n];
+        const sideCurr = dx * (curr.y - my) - dy * (curr.x - mx);
+        const sideNext = dx * (next.y - my) - dy * (next.x - mx);
+        if (sideCurr >= 0) newPoly.push(curr);
+        if ((sideCurr >= 0 && sideNext < 0) || (sideCurr < 0 && sideNext >= 0)) {
+          const inter = lineIntersection(curr, next, la, lb);
+          if (inter) newPoly.push(inter);
+        }
+      }
+      if (newPoly.length < 3) break;
+      poly = newPoly;
+    }
+    poly = clipToBounds(poly, 0, 0, MAP_W, MAP_H);
+    if (poly.length >= 3) polygons.push({ seed: points[i], vertices: poly, centroid: calcCentroid(poly) });
+  }
+  cachedVoronoi = polygons;
+  return polygons;
+}
+
+function clipToBounds(poly, x0, y0, x1, y1) {
+  poly = clipEdge(poly, {x:x0,y:y0}, {x:x1,y:y0});
+  poly = clipEdge(poly, {x:x1,y:y0}, {x:x1,y:y1});
+  poly = clipEdge(poly, {x:x1,y:y1}, {x:x0,y:y1});
+  poly = clipEdge(poly, {x:x0,y:y1}, {x:x0,y:y0});
+  return poly;
+}
+
+function clipEdge(poly, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const result = [];
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const curr = poly[i], next = poly[(i + 1) % n];
+    const sc = dx * (curr.y - a.y) - dy * (curr.x - a.x);
+    const sn = dx * (next.y - a.y) - dy * (next.x - a.x);
+    if (sc >= 0) result.push(curr);
+    if ((sc >= 0) !== (sn >= 0)) {
+      const inter = lineIntersection(curr, next, a, b);
+      if (inter) result.push(inter);
+    }
+  }
+  return result;
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ٩. توليد الخريطة (تضاريس، أسماء، تجاور)
+// ════════════════════════════════════════════════════════════════════
+function generateSeedPoints() {
+  const points = [], names = [];
+  for (let i = 0; i < 15; i++) {
+    const col = i % 3, row = Math.floor(i / 3);
+    points.push({ x: randFloat(80, 600), y: row * 450 + randFloat(50, 400) });
+    names.push({ name: PLAYER_NAMES[i], owner: OWNER_PLAYER });
+  }
+  for (let i = 0; i < 15; i++) {
+    const col = i % 3, row = Math.floor(i / 3);
+    points.push({ x: randFloat(1400, 1920), y: row * 450 + randFloat(50, 400) });
+    names.push({ name: ENEMY_NAMES[i], owner: OWNER_ENEMY });
+  }
+  for (let i = 0; i < 10; i++) {
+    const col = i % 2, row = Math.floor(i / 2);
+    points.push({ x: 700 + col * 300 + randFloat(-50, 50), y: 100 + row * 350 + randFloat(-30, 30) });
+    names.push({ name: NEUTRAL_NAMES[i], owner: OWNER_NEUTRAL });
+  }
+  return { points, names };
+}
+
+function assignTerrain(centroid) {
+  const { x, y } = centroid;
+  const r = seededRandom();
+  if (r < 0.10) return 'urban';
+  if (y < 400) return seededRandom() < 0.5 ? 'hills' : 'mountains';
+  if (y > 1100) return seededRandom() < 0.4 ? 'desert' : 'plains';
+  if (x < 800) return seededRandom() < 0.6 ? 'forest' : 'plains';
+  const types = ['plains', 'hills', 'forest', 'desert'];
+  return types[Math.floor(seededRandom() * types.length)];
+}
+
+function computeAdjacency(polygons) {
+  const maxDist = 500;
+  for (let i = 0; i < polygons.length; i++) {
+    polygons[i].adjacent = [];
+    for (let j = 0; j < polygons.length; j++) {
+      if (i === j) continue;
+      if (dist(polygons[i].seed, polygons[j].seed) < maxDist) polygons[i].adjacent.push(j);
+    }
+  }
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ١٠. حالة اللعبة المركزية (GAME STATE)
+// ════════════════════════════════════════════════════════════════════
+let gameState = null;
+
+function createGameState() {
+  return {
+    provinces: [],
+    resources: {
+      // اللاعب: موارد أكثر (تم تعديل التوازن)
+      player: { money: 1200, manpower: 600, steel: 350, oil: 250 },
+      // العدو: موارد أقل قليلاً
+      enemy:  { money: 1000, manpower: 500, steel: 300, oil: 200 }
+    },
+    tech: {
+      player: { completed: {}, current: null, progress: 0 },
+      enemy:  { completed: {}, current: null, progress: 0 }
+    },
+    selectedProvince: -1,
+    mode: 'select',
+    moveFrom: -1,
+    tick: 0,
+    speed: 0,
+    gameOver: false,
+    started: false,
+    income: { player: { money:0, manpower:0, steel:0, oil:0 }, enemy: { money:0, manpower:0, steel:0, oil:0 } },
+    stats: { conquered: 0, troopsLost: 0, buildingsBuilt: 0 }
+  };
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ١١. نظام الكاميرا
+// ════════════════════════════════════════════════════════════════════
+let camera = { x: 0, y: 0, zoom: 0.5, minZoom: 0.25, maxZoom: 2.0, targetX: 0, targetY: 0, targetZoom: 0.5 };
+
+function worldToScreen(wx, wy) {
+  return {
+    x: (wx - camera.x) * camera.zoom + canvas.width / 2,
+    y: (wy - camera.y) * camera.zoom + canvas.height / 2
+  };
+}
+
+function screenToWorld(sx, sy) {
+  return {
+    x: (sx - canvas.width / 2) / camera.zoom + camera.x,
+    y: (sy - canvas.height / 2) / camera.zoom + camera.y
+  };
+}
+
+function centerCamera(x, y, instant) {
+  camera.targetX = x; camera.targetY = y;
+  if (instant) { camera.x = x; camera.y = y; }
+}
+
+function updateCamera() {
+  camera.x += (camera.targetX - camera.x) * 0.15;
+  camera.y += (camera.targetY - camera.y) * 0.15;
+  camera.zoom += (camera.targetZoom - camera.zoom) * 0.15;
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ١٢. نظام الموارد والمباني
+// ════════════════════════════════════════════════════════════════════
+function calcProvinceProduction(prov, owner) {
+  const t = TERRAINS[prov.terrain];
+  const baseMoney = 5, baseMan = 3, baseSteel = 2, baseOil = 1;
+  let money = baseMoney * (1 + t.moneyMod), manpower = baseMan * (1 + t.manMod);
+  let steel = baseSteel * (1 + t.steelMod), oil = baseOil * (1 + t.oilMod);
+  const b = prov.buildings;
+  if (b.factory)   { money += baseMoney * 0.3; steel += baseSteel * 0.2; }
+  if (b.barracks)  { manpower += baseMan * 0.4; }
+  if (b.oilwell)   { oil += baseOil * 0.5; }
+  const tc = gameState.tech[owner].completed;
+  if (tc.indust) money *= 1.4;
+  if (tc.mobil)  manpower *= 1.5;
+  if (tc.metall) steel *= 1.4;
+  if (tc.drill)  oil *= 1.4;
+  return {
+    money: Math.round(money * 10) / 10, manpower: Math.round(manpower * 10) / 10,
+    steel: Math.round(steel * 10) / 10, oil: Math.round(oil * 10) / 10
+  };
+}
+
+function collectResources() {
+  const owners = [OWNER_PLAYER, OWNER_ENEMY];
+  const income = { player:{money:0,manpower:0,steel:0,oil:0}, enemy:{money:0,manpower:0,steel:0,oil:0} };
+  for (const owner of owners) {
+    for (const prov of gameState.provinces) {
+      if (prov.owner !== owner) continue;
+      const prod = calcProvinceProduction(prov, owner);
+      gameState.resources[owner].money += prod.money;
+      gameState.resources[owner].manpower += prod.manpower;
+      gameState.resources[owner].steel += prod.steel;
+      gameState.resources[owner].oil += prod.oil;
+      income[owner].money += prod.money; income[owner].manpower += prod.manpower;
+      income[owner].steel += prod.steel; income[owner].oil += prod.oil;
+    }
+  }
+  for (const owner of owners) {
+    for (const r of ['money','manpower','steel','oil']) {
+      gameState.resources[owner][r] = Math.round(gameState.resources[owner][r]);
+      income[owner][r] = Math.round(income[owner][r] * 10) / 10;
+    }
+  }
+  gameState.income = income;
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ١٣. نظام الوحدات والقتال
+// ════════════════════════════════════════════════════════════════════
+function recruitUnit(provId, unitType) {
+  playClickSound();
+  const prov = gameState.provinces[provId];
+  if (prov.owner !== OWNER_PLAYER) return;
+  const ut = UNIT_TYPES[unitType];
+  const res = gameState.resources.player;
+  if (res.money < ut.costMoney || res.manpower < ut.costMan || res.steel < ut.costSteel || res.oil < ut.costOil) {
+    showToast('❌ موارد غير كافية!'); return;
+  }
+  res.money -= ut.costMoney; res.manpower -= ut.costMan;
+  res.steel -= ut.costSteel; res.oil -= ut.costOil;
+  let ticks = ut.recruitTicks;
+  if (prov.buildings.arms) ticks = Math.max(1, Math.ceil(ticks * 0.5));
+  prov.recruiting = { type: unitType, remaining: ticks, total: ticks };
+  showToast(`🔨 جاري تجنيد ${ut.icon} ${ut.name} في ${prov.name}`);
+  closeBottomSheet();
+}
+
+function updateRecruitment() {
+  for (const prov of gameState.provinces) {
+    if (!prov.recruiting) continue;
+    prov.recruiting.remaining--;
+    if (prov.recruiting.remaining <= 0) {
+      const type = prov.recruiting.type;
+      prov.garrison[type] = (prov.garrison[type] || 0) + 1;
+      prov.recruiting = null;
+      // صوت إكمال التجنيد (فقط للاعب)
+      const provIdx = gameState.provinces.indexOf(prov);
+      if (prov.owner === OWNER_PLAYER) {
+        playRecruitSound();
+        addNotification(`تم تجنيد ${UNIT_TYPES[type].icon} ${UNIT_TYPES[type].name} في ${prov.name}`, 'info');
+      }
+    }
+  }
+}
+
+/*
+  نظام القتال المحسّن:
+  - المدفعية من المقاطعات المجاورة تضيف 25% (تم رفعها من 20%)
+  - عاصمة اللاعب تحصل على +20% دفاع إضافي
+  - معامل التضاريس والأبحاث
+  - عامل عشوائي ±15%
+  - تأثيرات بصرية وصوتية
+*/
+function executeCombat(attackerProvId, defenderProvId) {
+  const atkProv = gameState.provinces[attackerProvId];
+  const defProv = gameState.provinces[defenderProvId];
+  const atkOwner = atkProv.owner, defOwner = defProv.owner;
+
+  // === صوت القتال ===
+  playCombatSound();
+  triggerScreenShake();
+
+  // المدفعية المجاورة تدعم الهجوم (25% بدلاً من 20%)
+  let artSupport = 0;
+  for ( const adjId of atkProv.adjacent) {
+    const adj = gameState.provinces[adjId];
+    if (adj.owner === atkOwner && (adj.garrison.artillery || 0) > 0) {
+      artSupport += adj.garrison.artillery;
+    }
+  }
+
+  const atkTech = gameState.tech[atkOwner].completed;
+  const defTech = gameState.tech[defOwner].completed;
+  let atkTechMult = 1;
+  if (atkTech.blitz) atkTechMult = 1.3;
+  if (atkTech.combined) artSupport *= 1.5; // +50% فعالية مدفعية
+  let defTechMult = 1;
+  if (defTech.fortexp) defTechMult = 1.4;
+
+  const g1 = atkProv.garrison, g2 = defProv.garrison;
+  // هجوم: المدفعية تضيف 0.625 (25% زيادة عن 0.5 السابق)
+  const atkPower = (g1.infantry * 1 + g1.tanks * 3 + (g1.artillery + artSupport) * 0.625) * atkTechMult;
+  const terrain = TERRAINS[defProv.terrain];
+  const fortLevel = defProv.buildings.fort || 0;
+  let defMod = (1 + terrain.defMod) * (1 + fortLevel * 0.3) * defTechMult;
+  // === حماية العاصمة: +20% دفاع ===
+  if (defProv.isCapital) defMod *= 1.2;
+  const defPower = (g2.infantry * 1.5 + g2.tanks * 2.5 + g2.artillery * 0.3) * defMod;
+
+  const atkRoll = 0.85 + Math.random() * 0.3;
+  const defRoll = 0.85 + Math.random() * 0.3;
+  const totalAtk = atkPower * atkRoll, totalDef = defPower * defRoll;
+
+  // حساب القوات قبل القتال للإحصائيات
+  const atkTotalBefore = g1.infantry + g1.tanks + g1.artillery;
+  const defTotalBefore = g2.infantry + g2.tanks + g2.artillery;
+
+  if (totalAtk > totalDef) {
+    const ratio = totalDef / Math.max(1, totalAtk);
+    const atkLoss = Math.ceil(atkTotalBefore * ratio * 0.4);
+    let remaining = atkLoss;
+    const types = ['infantry', 'tanks', 'artillery'];
+    for (const t of types) {
+      const loss = Math.min(g1[t], Math.ceil(remaining / 3));
+      g1[t] -= loss; remaining -= loss;
+    }
+    defProv.owner = atkOwner;
+    defProv.garrison = { infantry: Math.max(0, g1.infantry), tanks: Math.max(0, g1.tanks), artillery: Math.max(0, g1.artillery) };
+    atkProv.garrison = { infantry: 0, tanks: 0, artillery: 0 };
+    defProv.recruiting = null;
+
+    // تأثيرات بصرية
+    addCombatAnimation(defenderProvId, 'flash-green', 'تم الاستيلاء');
+    const s = worldToScreen(defProv.centroid.x, defProv.centroid.y);
+    showFloatingDamage(s.x, s.y - 30, '⚔️ انتصار!', '#4ade80');
+
+    showToast(`✅ انتصار! استوليت على ${defProv.name}`);
+    addNotification(`انتصرت على ${defProv.name} واستوليت عليها!`, 'conquest');
+
+    if (atkOwner === OWNER_PLAYER) {
+      gameState.stats.conquered++;
+    }
+  } else {
+    const ratio = totalAtk / Math.max(1, totalDef);
+    const defLoss = Math.ceil(defTotalBefore * ratio * 0.3);
+    const atkLoss = Math.ceil(atkTotalBefore * 0.5);
+    let remaining = defLoss;
+    for (const t of ['infantry', 'tanks', 'artillery']) {
+      const loss = Math.min(g2[t], Math.ceil(remaining / 3));
+      g2[t] -= loss; remaining -= loss;
+    }
+    remaining = atkLoss;
+    for (const t of ['infantry', 'tanks', 'artillery']) {
+      const loss = Math.min(g1[t], Math.ceil(remaining / 3));
+      g1[t] -= loss; remaining -= loss;
+    }
+
+    // تأثيرات بصرية
+    addCombatAnimation(defenderProvId, 'flash-red', 'فشل الهجوم');
+    const s = worldToScreen(defProv.centroid.x, defProv.centroid.y);
+    showFloatingDamage(s.x, s.y - 30, `❌ -${atkLoss}`, '#f87171');
+
+    showToast(`❌ هزيمة! فشل الهجوم على ${defProv.name}`);
+    addNotification(`فشل الهجوم على ${defProv.name}! خسائر: ${atkLoss}`, 'combat');
+  }
+
+  // تحديث إحصائيات الخسائر
+  const atkTotalAfter = g1.infantry + g1.tanks + g1.artillery;
+  const atkLost = atkTotalBefore - atkTotalAfter;
+  const defTotalAfter = g2.infantry + g2.tanks + g2.artillery;
+  const defLost = defTotalBefore - defTotalAfter;
+  if (atkOwner === OWNER_PLAYER) gameState.stats.troopsLost += atkLost;
+  if (defOwner === OWNER_PLAYER) gameState.stats.troopsLost += defLost;
+
+  checkGameOver();
+}
+
+function moveTroops(fromId, toId) {
+  playMoveSound();
+  const from = gameState.provinces[fromId], to = gameState.provinces[toId];
+  to.garrison.infantry += from.garrison.infantry;
+  to.garrison.tanks += from.garrison.tanks;
+  to.garrison.artillery += from.garrison.artillery;
+  from.garrison = { infantry: 0, tanks: 0, artillery: 0 };
+  if (from.recruiting) { to.recruiting = from.recruiting; from.recruiting = null; }
+  showToast(`➡️ تم تحريك القوات إلى ${to.name}`);
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ١٤. شجرة التكنولوجيا
+// ════════════════════════════════════════════════════════════════════
+function startResearch(techId) {
+  playClickSound();
+  const tState = gameState.tech.player;
+  if (tState.current) { showToast('⚠️ هناك بحث جارٍ بالفعل!'); return; }
+  if (tState.completed[techId]) { showToast('⚠️ تم أبحاث هذا بالفعل!'); return; }
+  const tech = TECHS.find(t => t.id === techId);
+  if (gameState.resources.player.money < tech.cost) { showToast('❌ موارد غير كافية للأبحاث!'); return; }
+  gameState.resources.player.money -= tech.cost;
+  tState.current = techId; tState.progress = 0;
+  showToast(`🔬 بدء بحث: ${tech.name}`);
+}
+
+function updateResearch() {
+  for (const owner of [OWNER_PLAYER, OWNER_ENEMY]) {
+    const tState = gameState.tech[owner];
+    if (!tState.current) continue;
+    tState.progress++;
+    const tech = TECHS.find(t => t.id === tState.current);
+    if (tState.progress >= tech.days) {
+      tState.completed[tech.id] = true;
+      tState.current = null; tState.progress = 0;
+      if (owner === OWNER_PLAYER) {
+        playResearchSound();
+        showToast(`✅ تم أبحاث: ${tech.name}!`);
+        addNotification(`تم إنجاز البحث: ${tech.name}!`, 'research');
+      }
+    }
+  }
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ١٥. ذكاء اصطناعي محسّن (Enhanced AI Controller)
+// ════════════════════════════════════════════════════════════════════
+/*
+  الذكاء الاصطناعي المحسّن يعمل كل 10 أيام:
+  1. هجوم موجي (Wave Attack): تنسيق هجوم من 3+ مقاطعات
+  2. استطلاع محايدات ضعيفة (5 أو أقل)
+  3. أولوية اقتصادية في أول 50 يوم
+  4. أبحاث: blitz أولاً ثم mobil
+  5. دفاع بالعمق: تحصين الطبقة الثانية
+  6. تجنيد وحدات في المقاطعات الحدودية
+*/
+function runAI() {
+  const enemyProvs = gameState.provinces.filter(p => p.owner === OWNER_ENEMY);
+  const enemyRes = gameState.resources.enemy;
+  const enemyTech = gameState.tech.enemy;
+  if (enemyProvs.length === 0) return;
+
+  const isEarlyGame = gameState.tick < 50;
+
+  // 0. استطلاع محايدات ضعيفة
+  if (!isEarlyGame) {
+    for (const prov of enemyProvs) {
+      const adjNeutrals = prov.adjacent
+        .map(id => gameState.provinces[id])
+        .filter(p => p.owner === OWNER_NEUTRAL);
+      for (const n of adjNeutrals) {
+        const nTotal = n.garrison.infantry + n.garrison.tanks + n.garrison.artillery;
+        const myPower = prov.garrison.infantry * 1 + prov.garrison.tanks * 3 + prov.garrison.artillery * 0.5;
+        if (nTotal <= 5 && myPower > nTotal * 2) {
+          executeCombat(gameState.provinces.indexOf(prov), gameState.provinces.indexOf(n));
+          return;
+        }
+      }
+    }
+  }
+
+  // 1. هجوم موجي (Wave Attack)
+  // إذا كان 3+ مقاطعات معادية مجاورة لمقاطعة واحدة، هجوم من أقواها
+  if (!isEarlyGame) {
+    const playerProvs = gameState.provinces.filter(p => p.owner === OWNER_PLAYER || p.owner === OWNER_NEUTRAL);
+    for (const target of playerProvs) {
+      const enemyAdj = target.adjacent
+        .map(id => gameState.provinces[id])
+        .filter(p => p.owner === OWNER_ENEMY);
+      if (enemyAdj.length >= 3) {
+        // جمع القوة الإجمالية المجاورة
+        let totalPower = 0;
+        for (const ep of enemyAdj) {
+          totalPower += ep.garrison.infantry * 1 + ep.garrison.tanks * 3 + ep.garrison.artillery * 0.5;
+        }
+        const defPower = target.garrison.infantry * 1.5 + target.garrison.tanks * 2.5 + target.garrison.artillery * 0.3;
+        const defMod = target.isCapital ? 1.44 : 1; // 1.2 capital * 1.2 terrain average
+        if (totalPower > defPower * defMod * 1.3) {
+          // هجوم من أقوى مقاطعة
+          let strongest = null, strongestPower = 0;
+          for (const ep of enemyAdj) {
+            const p = ep.garrison.infantry * 1 + ep.garrison.tanks * 3 + ep.garrison.artillery * 0.5;
+            if (p > strongestPower) { strongestPower = p; strongest = ep; }
+          }
+          if (strongest && strongestPower > 8) {
+            executeCombat(gameState.provinces.indexOf(strongest), gameState.provinces.indexOf(target));
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  // 2. تقييم الحدود والهجوم الفردي
+  for (const prov of enemyProvs) {
+    const borderEnemies = prov.adjacent.map(id => gameState.provinces[id]).filter(p => p.owner !== OWNER_ENEMY);
+    if (borderEnemies.length === 0) continue;
+    const myPower = prov.garrison.infantry * 1 + prov.garrison.tanks * 3 + prov.garrison.artillery * 0.5;
+    let weakest = null, weakestPower = Infinity;
+    for (const be of borderEnemies) {
+      const power = be.garrison.infantry * 1.5 + be.garrison.tanks * 2.5 + be.garrison.artillery * 0.3;
+      if (be.isCapital) power *= 1.2;
+      if (power < weakestPower) { weakestPower = power; weakest = be; }
+    }
+    if (weakest && myPower > weakestPower * 1.5 && myPower > 8) {
+      executeCombat(gameState.provinces.indexOf(prov), gameState.provinces.indexOf(weakest));
+      return;
+    }
+  }
+
+  // 3. دفاع بالعمق - تحصين المقاطعات على بعد طبقتين من الجبهة
+  for (const prov of enemyProvs) {
+    const borderEnemies = prov.adjacent.filter(id => gameState.provinces[id].owner !== OWNER_ENEMY);
+    if (borderEnemies.length > 0) continue; // مقاطعة حدودية
+    // هل هي طبقة ثانية؟ (مجاورة لمقاطعة حدودية)
+    const isSecondLine = prov.adjacent.some(id => {
+      const adj = gameState.provinces[id];
+      return adj.owner === OWNER_ENEMY && adj.adjacent.some(aid => gameState.provinces[aid].owner !== OWNER_ENEMY);
+    });
+    if (isSecondLine && (!prov.buildings.fort || prov.buildings.fort < 2) && enemyRes.money >= 170 && enemyRes.steel >= 128) {
+      enemyRes.money -= 170; enemyRes.steel -= 128;
+      prov.buildings.fort = (prov.buildings.fort || 0) + 1;
+      return;
+    }
+  }
+
+  // 4. الدفاع - نقل قوات من الداخل
+  for (const prov of enemyProvs) {
+    const borderEnemies = prov.adjacent.filter(id => gameState.provinces[id].owner !== OWNER_ENEMY);
+    if (borderEnemies.length === 0) continue;
+    const myPower = prov.garrison.infantry * 1 + prov.garrison.tanks * 3;
+    let enemyThreat = 0;
+    for (const adjId of borderEnemies) {
+      const adj = gameState.provinces[adjId];
+      enemyThreat += adj.garrison.infantry + adj.garrison.tanks * 2;
+    }
+    if (myPower < enemyThreat * 0.6) {
+      for (const inner of enemyProvs) {
+        const innerBorder = inner.adjacent.filter(id => gameState.provinces[id].owner !== OWNER_ENEMY);
+        if (innerBorder.length > 0 || inner === prov) continue;
+        const innerTroops = inner.garrison.infantry + inner.garrison.tanks;
+        if (innerTroops > 5) {
+          const moveInf = Math.floor(inner.garrison.infantry * 0.5);
+          const moveTanks = Math.floor(inner.garrison.tanks * 0.5);
+          inner.garrison.infantry -= moveInf; inner.garrison.tanks -= moveTanks;
+          prov.garrison.infantry += moveInf; prov.garrison.tanks += moveTanks;
+          return;
+        }
+      }
+    }
+  }
+
+  // 5. تجنيد وحدات
+  for (const prov of enemyProvs) {
+    if (prov.recruiting) continue;
+    const totalTroops = prov.garrison.infantry + prov.garrison.tanks + prov.garrison.artillery;
+    if (totalTroops > 30) continue;
+    if (enemyRes.money >= 100 && enemyRes.manpower >= 50) {
+      const ut = UNIT_TYPES.infantry;
+      enemyRes.money -= ut.costMoney; enemyRes.manpower -= ut.costMan;
+      let ticks = ut.recruitTicks;
+      if (prov.buildings.arms) ticks = Math.max(1, Math.ceil(ticks * 0.5));
+      prov.recruiting = { type: 'infantry', remaining: ticks, total: ticks };
+      return;
+    }
+    if (enemyRes.money >= 250 && enemyRes.manpower >= 100 && enemyRes.steel >= 100) {
+      const ut = UNIT_TYPES.tanks;
+      enemyRes.money -= ut.costMoney; enemyRes.manpower -= ut.costMan;
+      enemyRes.steel -= ut.costSteel; enemyRes.oil -= ut.costOil;
+      let ticks = ut.recruitTicks;
+      if (prov.buildings.arms) ticks = Math.max(1, Math.ceil(ticks * 0.5));
+      prov.recruiting = { type: 'tanks', remaining: ticks, total: ticks };
+      return;
+    }
+  }
+
+  // 6. بناء اقتصادي
+  for (const prov of enemyProvs) {
+    const borderEnemies = prov.adjacent.filter(id => gameState.provinces[id].owner !== OWNER_ENEMY);
+    if (borderEnemies.length > 0 && isEarlyGame) continue; // أول 50 يوم: لا نبني في الحدود
+    if (!prov.buildings.factory && enemyRes.money >= 255 && enemyRes.steel >= 170) {
+      enemyRes.money -= 255; enemyRes.steel -= 170;
+      prov.buildings.factory = 1; return;
+    }
+    if (!prov.buildings.barracks && enemyRes.money >= 170 && enemyRes.steel >= 85) {
+      enemyRes.money -= 170; enemyRes.steel -= 85;
+      prov.buildings.barracks = 1; return;
+    }
+    if (!prov.buildings.oilwell && enemyRes.money >= 213 && enemyRes.steel >= 85) {
+      enemyRes.money -= 213; enemyRes.steel -= 85;
+      prov.buildings.oilwell = 1; return;
+    }
+    if (borderEnemies.length === 0 && (!prov.buildings.fort || prov.buildings.fort < 3) && enemyRes.money >= 170 && enemyRes.steel >= 128) {
+      enemyRes.money -= 170; enemyRes.steel -= 128;
+      prov.buildings.fort = (prov.buildings.fort || 0) + 1; return;
+    }
+  }
+
+  // 7. أبحاث (أولوية: blitz -> mobil -> الباقي)
+  if (!enemyTech.current) {
+    const priority = ['blitz', 'mobil'];
+    let chosen = null;
+    for (const pid of priority) {
+      if (!enemyTech.completed[pid]) { chosen = TECHS.find(t => t.id === pid); break; }
+    }
+    if (!chosen) {
+      const available = TECHS.filter(t => !enemyTech.completed[t.id]);
+      if (available.length > 0) chosen = available[Math.floor(Math.random() * available.length)];
+    }
+    if (chosen && enemyRes.money >= chosen.cost) {
+      enemyRes.money -= chosen.cost;
+      enemyTech.current = chosen.id; enemyTech.progress = 0;
+    }
+  }
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ١٦. نظام الوقت (Tick System)
+// ════════════════════════════════════════════════════════════════════
+let tickTimer = null;
+
+function setSpeed(s) {
+  playClickSound();
+  gameState.speed = s;
+  if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+  document.querySelectorAll('.speed-btn').forEach((btn, i) => {
+    btn.classList.toggle('bg-military-green', i === s);
+    btn.classList.toggle('bg-gray-700', i !== s);
+  });
+  if (s > 0) {
+    const intervals = [0, 1000, 500, 333];
+    tickTimer = setInterval(gameTick, intervals[s]);
+  }
+}
+
+function gameTick() {
+  if (gameState.gameOver || !gameState.started) return;
+  gameState.tick++;
+  collectResources();
+  updateRecruitment();
+  updateResearch();
+  if (gameState.tick % 10 === 0) runAI();
+  // === الحفظ التلقائي كل 10 ticks ===
+  if (gameState.tick % 10 === 0) autoSave();
+  updateUI();
+  checkGameOver();
+}
+
+function formatDate(tick) {
+  const day = (tick % 30) + 1;
+  const month = Math.floor(tick / 30) % 12 + 1;
+  const year = Math.floor(tick / 360) + 1;
+  const an = (n) => n.toString().replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+  return `اليوم ${an(day)}، الشهر ${an(month)}، السنة ${an(year)}`;
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ١٧. معالجة المدخلات (لمس + فأرة)
+// ════════════════════════════════════════════════════════════════════
+let canvas, ctx, minimapCanvas, minimapCtx;
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
+let cameraStart = { x: 0, y: 0 };
+let lastTouchDist = 0;
+let tapStartTime = 0;
+let tapStartPos = { x: 0, y: 0 };
+
+function initInput() {
+  canvas.addEventListener('mousedown', onMouseDown);
+  canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('mouseup', onMouseUp);
+  canvas.addEventListener('wheel', onWheel, { passive: false });
+  canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+  canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+  canvas.addEventListener('touchend', onTouchEnd, { passive: false });
+}
+
+function onMouseDown(e) {
+  e.preventDefault();
+  isDragging = true;
+  dragStart = { x: e.clientX, y: e.clientY };
+  cameraStart = { x: camera.targetX, y: camera.targetY };
+  tapStartTime = Date.now(); tapStartPos = { x: e.clientX, y: e.clientY };
+}
+function onMouseMove(e) {
+  if (!isDragging) return;
+  const dx = (e.clientX - dragStart.x) / camera.zoom;
+  const dy = (e.clientY - dragStart.y) / camera.zoom;
+  camera.targetX = cameraStart.x - dx; camera.targetY = cameraStart.y - dy;
+}
+function onMouseUp(e) {
+  const dt = Date.now() - tapStartTime;
+  const dd = Math.hypot(e.clientX - tapStartPos.x, e.clientY - tapStartPos.y);
+  isDragging = false;
+  if (dt < 300 && dd < 10) handleTap(e.clientX, e.clientY);
+}
+function onWheel(e) {
+  e.preventDefault();
+  const factor = e.deltaY > 0 ? 0.9 : 1.1;
+  camera.targetZoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.targetZoom * factor));
+}
+function onTouchStart(e) {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    isDragging = true;
+    dragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    cameraStart = { x: camera.targetX, y: camera.targetY };
+    tapStartTime = Date.now(); tapStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  } else if (e.touches.length === 2) {
+    isDragging = false;
+    lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  }
+}
+function onTouchMove(e) {
+  e.preventDefault();
+  if (e.touches.length === 1 && isDragging) {
+    const dx = (e.touches[0].clientX - dragStart.x) / camera.zoom;
+    const dy = (e.touches[0].clientY - dragStart.y) / camera.zoom;
+    camera.targetX = cameraStart.x - dx; camera.targetY = cameraStart.y - dy;
+  } else if (e.touches.length === 2) {
+    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    if (lastTouchDist > 0) {
+      const factor = d / lastTouchDist;
+      camera.targetZoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.targetZoom * factor));
+    }
+    lastTouchDist = d;
+  }
+}
+function onTouchEnd(e) {
+  if (e.touches.length === 0) {
+    if (isDragging) {
+      const dt = Date.now() - tapStartTime;
+      const touch = e.changedTouches[0];
+      const dd = Math.hypot(touch.clientX - tapStartPos.x, touch.clientY - tapStartPos.y);
+      if (dt < 300 && dd < 15) handleTap(touch.clientX, touch.clientY);
+    }
+    isDragging = false; lastTouchDist = 0;
+  }
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ١٨. وحدة تحكم واجهة المستخدم (UI Controller)
+// ════════════════════════════════════════════════════════════════════
+let currentTab = 'map';
+
+function handleTap(clientX, clientY) {
+  playClickSound();
+  if (gameState.gameOver) return;
+  const rect = canvas.getBoundingClientRect();
+  const sx = clientX - rect.left, sy = clientY - rect.top;
+  const world = screenToWorld(sx, sy);
+
+  if (gameState.mode === 'move') {
+    const clickedId = findProvinceAt(world.x, world.y);
+    if (clickedId >= 0 && gameState.provinces[gameState.moveFrom].adjacent.includes(clickedId)) {
+      const target = gameState.provinces[clickedId];
+      const source = gameState.provinces[gameState.moveFrom];
+      if (target.owner === source.owner) {
+        moveTroops(gameState.moveFrom, clickedId);
+      } else {
+        executeCombat(gameState.moveFrom, clickedId);
+      }
+      gameState.mode = 'select'; gameState.moveFrom = -1;
+      closeBottomSheet(); updateUI(); return;
+    }
+    gameState.mode = 'select'; gameState.moveFrom = -1; return;
+  }
+
+  const provId = findProvinceAt(world.x, world.y);
+  if (provId >= 0) {
+    gameState.selectedProvince = provId;
+    showBottomSheet(provId);
+  } else {
+    gameState.selectedProvince = -1;
+    closeBottomSheet();
+  }
+}
+
+function findProvinceAt(wx, wy) {
+  for (let i = 0; i < gameState.provinces.length; i++) {
+    if (pointInPolygon(wx, wy, gameState.provinces[i].polygon)) return i;
+  }
+  return -1;
+}
+
+function showBottomSheet(provId) {
+  const prov = gameState.provinces[provId];
+  const sheet = document.getElementById('bottomSheet');
+  const terrain = TERRAINS[prov.terrain];
+  const colors = OWNER_COLORS[prov.owner];
+
+  document.getElementById('bsName').textContent = prov.name + (prov.isCapital ? ' ⭐' : '');
+  document.getElementById('bsTerrain').textContent = `${terrain.icon} ${terrain.name}`;
+  const ownerEl = document.getElementById('bsOwner');
+  ownerEl.textContent = prov.owner === OWNER_PLAYER ? '🔵 ممتلكاتك' : prov.owner === OWNER_ENEMY ? '🔴 عدو' : '⚪ محايد';
+  ownerEl.style.background = prov.owner === OWNER_PLAYER ? 'rgba(37,99,235,0.3)' : prov.owner === OWNER_ENEMY ? 'rgba(220,38,38,0.3)' : 'rgba(107,114,128,0.3)';
+
+  const g = prov.garrison;
+  const hasEspionage = gameState.tech.player.completed.espion;
+  const showGarrison = prov.owner === OWNER_PLAYER || prov.owner === OWNER_NEUTRAL || hasEspionage;
+
+  document.getElementById('bsGarrison').innerHTML = showGarrison ?
+    `<span>🗡️ مشاة: <b>${g.infantry}</b></span><span>🔥 دبابات: <b>${g.tanks}</b></span><span>💥 مدفعية: <b>${g.artillery}</b></span>` :
+    `<span>👁️ قوات مخفية (بحاجة أبحاث التجسس)</span>`;
+
+  const bDiv = document.getElementById('bsBuildings');
+  let bHtml = '';
+  if (prov.buildings.factory) bHtml += `<span class="px-1.5 py-0.5 bg-gray-700 rounded">🏭 مصنع</span>`;
+  if (prov.buildings.barracks) bHtml += `<span class="px-1.5 py-0.5 bg-gray-700 rounded">🏠 ثكنات</span>`;
+  if (prov.buildings.oilwell) bHtml += `<span class="px-1.5 py-0.5 bg-gray-700 rounded">🛢️ بئر نفط</span>`;
+  const fortLvl = prov.buildings.fort || 0;
+  if (fortLvl > 0) bHtml += `<span class="px-1.5 py-0.5 bg-gray-700 rounded">🏰 تحصينات x${fortLvl}</span>`;
+  if (prov.buildings.arms) bHtml += `<span class="px-1.5 py-0.5 bg-gray-700 rounded">🔫 مصنع أسلحة</span>`;
+  if (!bHtml) bHtml = '<span class="text-gray-500">لا توجد مبانٍ</span>';
+  bDiv.innerHTML = bHtml;
+
+  const recDiv = document.getElementById('bsRecruiting');
+  if (prov.recruiting) {
+    const ut = UNIT_TYPES[prov.recruiting.type];
+    const pct = Math.round((1 - prov.recruiting.remaining / prov.recruiting.total) * 100);
+    recDiv.innerHTML = `🔨 جاري تجنيد ${ut.icon} ${ut.name}: ${pct}% (${prov.recruiting.remaining} يوم)`;
+  } else { recDiv.innerHTML = ''; }
+
+  const actions = document.getElementById('bsActions');
+  if (prov.owner === OWNER_PLAYER) {
+    actions.innerHTML = `
+      <button onclick="recruitUnit(${provId},'infantry')" class="province-btn px-2 py-1.5 bg-military-green rounded text-[10px] font-bold">🗡️ تجنيد مشاة<br><span class="text-gray-400">100💰 50👥</span></button>
+      <button onclick="recruitUnit(${provId},'tanks')" class="province-btn px-2 py-1.5 bg-military-green rounded text-[10px] font-bold">🔥 تجنيد دبابات<br><span class="text-gray-400">250💰 100👥 100⛏️ 50🛢️</span></button>
+      <button onclick="recruitUnit(${provId},'artillery')" class="province-btn px-2 py-1.5 bg-military-green rounded text-[10px] font-bold">💥 تجنيد مدفعية<br><span class="text-gray-400">200💰 50👥 50⛏️</span></button>
+      <button onclick="enterMoveMode(${provId})" class="province-btn px-2 py-1.5 bg-military-gold text-black rounded text-[10px] font-bold">⚔️ تحريك/هجوم<br><span class="text-gray-700">نقل القوات</span></button>
+    `;
+    actions.innerHTML += `<button onclick="showBuildPanel(${provId})" class="province-btn px-2 py-1.5 bg-blue-700 rounded text-[10px] font-bold col-span-2 sm:col-span-4">🏗️ بناء في ${prov.name}</button>`;
+  } else {
+    actions.innerHTML = `<div class="col-span-2 sm:col-span-4 text-xs text-gray-400">${prov.owner === OWNER_ENEMY ? '🔴 مقاطعة معادية' : '⚪ مقاطعة محايدة'}</div>`;
+  }
+  sheet.classList.remove('hidden');
+}
+
+function closeBottomSheet() { document.getElementById('bottomSheet').classList.add('hidden'); }
+
+function enterMoveMode(provId) {
+  playClickSound();
+  const prov = gameState.provinces[provId];
+  const total = prov.garrison.infantry + prov.garrison.tanks + prov.garrison.artillery;
+  if (total === 0) { showToast('⚠️ لا توجد قوات للتحريك!'); return; }
+  gameState.mode = 'move'; gameState.moveFrom = provId;
+  closeBottomSheet();
+  showToast('🎯 اختر مقاطعة مجاورة (أخضر=تحريك، أحمر=هجوم)');
+}
+
+function showBuildPanel(provId) {
+  playClickSound();
+  const prov = gameState.provinces[provId];
+  document.getElementById('buildProvName').textContent = prov.name;
+  const opts = document.getElementById('buildOptions');
+  let html = '';
+  for (const [key, b] of Object.entries(BUILDINGS)) {
+    const current = key === 'fort' ? (prov.buildings.fort || 0) : (prov.buildings[key] ? 1 : 0);
+    const maxed = key === 'fort' ? current >= 3 : current > 0;
+    const res = gameState.resources.player;
+    const canAfford = res.money >= b.costMoney && res.steel >= b.costSteel;
+    html += `<div class="flex items-center justify-between p-2 rounded ${maxed ? 'bg-gray-800 opacity-50' : canAfford ? 'bg-gray-800' : 'bg-gray-800 opacity-60'}">
+      <div>
+        <div class="text-sm font-bold">${b.icon} ${b.name} ${key === 'fort' ? `(المستوى ${current}/3)` : ''}</div>
+        <div class="text-[10px] text-gray-400">${b.desc}</div>
+        <div class="text-[10px] text-gray-500">التكلفة: ${b.costMoney}💰 ${b.costSteel}⛏️</div>
+      </div>
+      <button onclick="buildInProvince(${provId},'${key}')" class="px-3 py-1 ${maxed ? 'bg-gray-600 cursor-not-allowed' : canAfford ? 'bg-military-green hover:bg-green-700' : 'bg-gray-600 cursor-not-allowed'} rounded text-xs font-bold" ${maxed || !canAfford ? 'disabled' : ''}>
+        ${maxed ? '✅ مكتمل' : '🏗️ بناء'}
+      </button>
+    </div>`;
+  }
+  opts.innerHTML = html;
+  document.getElementById('buildPanel').classList.remove('hidden');
+}
+
+function closeBuildPanel() { document.getElementById('buildPanel').classList.add('hidden'); }
+
+function buildInProvince(provId, buildingKey) {
+  playClickSound();
+  const b = BUILDINGS[buildingKey];
+  const res = gameState.resources.player;
+  if (res.money < b.costMoney || res.steel < b.costSteel) { showToast('❌ موارد غير كافية!'); return; }
+  res.money -= b.costMoney; res.steel -= b.costSteel;
+  if (buildingKey === 'fort') {
+    gameState.provinces[provId].buildings.fort = (gameState.provinces[provId].buildings.fort || 0) + 1;
+  } else {
+    gameState.provinces[provId].buildings[buildingKey] = 1;
+  }
+  playBuildSound();
+  gameState.stats.buildingsBuilt++;
+  showToast(`✅ تم بناء ${b.icon} ${b.name}!`);
+  addNotification(`تم بناء ${b.name} في ${gameState.provinces[provId].name}`, 'build');
+  showBuildPanel(provId);
+}
+
+function switchTab(tab) {
+  playClickSound();
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('active'); b.classList.add('text-gray-500'); });
+  const panels = ['economyPanel', 'researchPanel', 'diplomacyPanel'];
+  panels.forEach(p => document.getElementById(p).classList.add('hidden'));
+  if (tab === 'map') {
+    document.getElementById('tabMap').classList.add('active'); document.getElementById('tabMap').classList.remove('text-gray-500');
+  } else if (tab === 'economy') {
+    document.getElementById('tabEconomy').classList.add('active'); document.getElementById('tabEconomy').classList.remove('text-gray-500');
+    document.getElementById('economyPanel').classList.remove('hidden'); renderEconomy();
+  } else if (tab === 'research') {
+    document.getElementById('tabResearch').classList.add('active'); document.getElementById('tabResearch').classList.remove('text-gray-500');
+    document.getElementById('researchPanel').classList.remove('hidden'); renderResearch();
+  } else if (tab === 'diplomacy') {
+    document.getElementById('tabDiplomacy').classList.add('active'); document.getElementById('tabDiplomacy').classList.remove('text-gray-500');
+    document.getElementById('diplomacyPanel').classList.remove('hidden'); renderDiplomacy();
+  }
+}
+
+function renderEconomy() {
+  const res = gameState.resources.player;
+  const inc = gameState.income.player;
+  document.getElementById('econSummary').innerHTML = `
+    <div class="grid grid-cols-2 gap-2 mb-2">
+      <div class="bg-gray-800 p-2 rounded">
+        <div class="text-lg">💰 ${Math.round(res.money)}</div>
+        <div class="text-[10px] text-gray-400">المال (+${inc.money}/يوم)</div>
+      </div>
+      <div class="bg-gray-800 p-2 rounded">
+        <div class="text-lg">👥 ${Math.round(res.manpower)}</div>
+        <div class="text-[10px] text-gray-400">القوة البشرية (+${inc.manpower}/يوم)</div>
+      </div>
+      <div class="bg-gray-800 p-2 rounded">
+        <div class="text-lg">⛏️ ${Math.round(res.steel)}</div>
+        <div class="text-[10px] text-gray-400">الصلب (+${inc.steel}/يوم)</div>
+      </div>
+      <div class="bg-gray-800 p-2 rounded">
+        <div class="text-lg">🛢️ ${Math.round(res.oil)}</div>
+        <div class="text-[10px] text-gray-400">النفط (+${inc.oil}/يوم)</div>
+      </div>
+    </div>`;
+  let provHtml = '';
+  for (const prov of gameState.provinces) {
+    if (prov.owner !== OWNER_PLAYER) continue;
+    const prod = calcProvinceProduction(prov, OWNER_PLAYER);
+    const terrain = TERRAINS[prov.terrain];
+    const idx = gameState.provinces.indexOf(prov);
+    provHtml += `
+      <div class="bg-gray-800 p-2 rounded text-xs cursor-pointer hover:bg-gray-700" onclick="switchTab('map');gameState.selectedProvince=${idx};centerCamera(${Math.round(prov.centroid.x)},${Math.round(prov.centroid.y)},true);showBottomSheet(${idx})">
+        <div class="font-bold text-sm">${prov.name} ${prov.isCapital?'⭐':''} ${terrain.icon}</div>
+        <div class="text-gray-400 text-[10px]">💰+${prod.money} 👥+${prod.manpower} ⛏️+${prod.steel} 🛢️+${prod.oil}</div>
+      </div>`;
+  }
+  document.getElementById('econProvinces').innerHTML = provHtml || '<div class="text-gray-500">لا توجد مقاطعات</div>';
+}
+
+function renderResearch() {
+  const techState = gameState.tech.player;
+  let html = '';
+  for (const tech of TECHS) {
+    const done = techState.completed[tech.id];
+    const isCurrent = techState.current === tech.id;
+    const canAfford = gameState.resources.player.money >= tech.cost;
+    let statusHtml = '';
+    if (done) {
+      statusHtml = `<div class="text-green-400 text-[10px]">✅ مكتمل</div>`;
+    } else if (isCurrent) {
+      const pct = Math.round(techState.progress / tech.days * 100);
+      statusHtml = `<div class="w-full bg-gray-700 rounded-full h-2 mt-1"><div class="bg-military-gold h-2 rounded-full" style="width:${pct}%"></div></div>
+        <div class="text-[10px] text-military-gold">${pct}% (${tech.days - techState.progress} يوم متبقي)</div>`;
+    } else {
+      statusHtml = `<button onclick="startResearch('${tech.id}')" class="mt-1 w-full py-1 ${canAfford ? 'bg-military-green hover:bg-green-700' : 'bg-gray-600 cursor-not-allowed'} rounded text-[10px] font-bold" ${!canAfford ? 'disabled' : ''}>🔬 بحث (${tech.cost}💰)</button>`;
+    }
+    html += `
+      <div class="bg-gray-800 p-2 rounded ${done ? 'border border-green-800' : isCurrent ? 'border border-military-gold' : ''}">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">${tech.icon}</span>
+          <div class="flex-1">
+            <div class="text-xs font-bold">${tech.name}</div>
+            <div class="text-[10px] text-gray-400">${tech.desc}</div>
+            <div class="text-[10px] text-gray-500">المدة: ${tech.days} يوم</div>
+            ${statusHtml}
+          </div>
+        </div>
+      </div>`;
+  }
+  document.getElementById('techGrid').innerHTML = html;
+}
+
+function renderDiplomacy() {
+  const playerCount = gameState.provinces.filter(p => p.owner === OWNER_PLAYER).length;
+  const enemyCount = gameState.provinces.filter(p => p.owner === OWNER_ENEMY).length;
+  const neutralCount = gameState.provinces.filter(p => p.owner === OWNER_NEUTRAL).length;
+  document.getElementById('diplomacyContent').innerHTML = `
+    <div class="bg-gray-800 p-3 rounded">
+      <h3 class="font-bold mb-2 text-military-gold">حالة الصراع</h3>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between"><span>🔵 ممتلكاتك</span><span class="font-bold">${playerCount} مقاطعة</span></div>
+        <div class="flex justify-between"><span>🔴 العدو</span><span class="font-bold">${enemyCount} مقاطعة</span></div>
+        <div class="flex justify-between"><span>⚪ محايد</span><span class="font-bold">${neutralCount} مقاطعة</span></div>
+      </div>
+    </div>
+    <div class="bg-gray-800 p-3 rounded">
+      <h3 class="font-bold mb-2 text-red-400">🔴 العلاقات مع العدو</h3>
+      <div class="text-center py-3"><div class="text-2xl mb-1">⚔️</div><div class="text-red-400 font-bold">حالة حرب</div></div>
+    </div>
+    <div class="bg-gray-800 p-3 rounded">
+      <h3 class="font-bold mb-2 text-military-gold">📊 ملخص القوى</h3>
+      <div class="space-y-1 text-xs">
+        <div class="flex justify-between"><span>قواتك:</span><span class="text-blue-400 font-bold">${countTotalTroops(OWNER_PLAYER)}</span></div>
+        <div class="flex justify-between"><span>قوات العدو:</span><span class="text-red-400 font-bold">${countTotalTroops(OWNER_ENEMY)}</span></div>
+        <div class="flex justify-between"><span>محايد:</span><span class="text-gray-400 font-bold">${countTotalTroops(OWNER_NEUTRAL)}</span></div>
+      </div>
+    </div>`;
+}
+
+function countTotalTroops(owner) {
+  let total = 0;
+  for (const p of gameState.provinces) { if (p.owner !== owner) continue; total += p.garrison.infantry + p.garrison.tanks + p.garrison.artillery; }
+  return total;
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.remove('hidden');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.add('hidden'), 2500);
+}
+
+function updateUI() {
+  document.getElementById('dateDisplay').textContent = formatDate(gameState.tick);
+  const r = gameState.resources.player;
+  const inc = gameState.income.player;
+  document.getElementById('rMoney').textContent = Math.round(r.money);
+  document.getElementById('rMan').textContent = Math.round(r.manpower);
+  document.getElementById('rSteel').textContent = Math.round(r.steel);
+  document.getElementById('rOil').textContent = Math.round(r.oil);
+  if (currentTab === 'economy') renderEconomy();
+  if (currentTab === 'research') renderResearch();
+  if (currentTab === 'diplomacy') renderDiplomacy();
+  if (!document.getElementById('bottomSheet').classList.contains('hidden') && gameState.selectedProvince >= 0) {
+    showBottomSheet(gameState.selectedProvince);
+  }
+}
+
+function checkGameOver() {
+  const playerCount = gameState.provinces.filter(p => p.owner === OWNER_PLAYER).length;
+  const enemyCount = gameState.provinces.filter(p => p.owner === OWNER_ENEMY).length;
+  const stats = gameState.stats;
+
+  if (enemyCount === 0 && !gameState.gameOver) {
+    gameState.gameOver = true; gameState.speed = 0;
+    if (tickTimer) clearInterval(tickTimer);
+    playVictorySound();
+    document.getElementById('goIcon').textContent = '🏆';
+    document.getElementById('goTitle').textContent = '🎉 انتصار!';
+    document.getElementById('goTitle').className = 'text-2xl font-bold mb-2 text-green-400';
+    document.getElementById('goDesc').textContent = `استوليت على كل المقاطعات في ${formatDate(gameState.tick)}!`;
+    document.getElementById('goStats').innerHTML = `
+      <div class="flex justify-between"><span>📅 الأيام:</span><b>${gameState.tick}</b></div>
+      <div class="flex justify-between"><span>🏴 المقاطعات المحتلة:</span><b>${stats.conquered}</b></div>
+      <div class="flex justify-between"><span>💔 الخسائر:</span><b>${stats.troopsLost}</b></div>
+      <div class="flex justify-between"><span>🏗️ المباني:</span><b>${stats.buildingsBuilt}</b></div>`;
+    document.getElementById('gameOverOverlay').classList.remove('hidden');
+    addNotification('🎉 انتصار! تم احتلال كل المقاطعات!', 'victory');
+    localStorage.removeItem(SAVE_KEY);
+  } else if (playerCount === 0 && !gameState.gameOver) {
+    gameState.gameOver = true; gameState.speed = 0;
+    if (tickTimer) clearInterval(tickTimer);
+    playDefeatSound();
+    document.getElementById('goIcon').textContent = '💀';
+    document.getElementById('goTitle').textContent = '😢 هزيمة';
+    document.getElementById('goTitle').className = 'text-2xl font-bold mb-2 text-red-400';
+    document.getElementById('goDesc').textContent = `خسرت كل مقاطعاتك في ${formatDate(gameState.tick)}`;
+    document.getElementById('goStats').innerHTML = `
+      <div class="flex justify-between"><span>📅 الأيام:</span><b>${gameState.tick}</b></div>
+      <div class="flex justify-between"><span>🏴 المقاطعات المحتلة:</span><b>${stats.conquered}</b></div>
+      <div class="flex justify-between"><span>💔 الخسائر:</span><b>${stats.troopsLost}</b></div>
+      <div class="flex justify-between"><span>🏗️ المباني:</span><b>${stats.buildingsBuilt}</b></div>`;
+    document.getElementById('gameOverOverlay').classList.remove('hidden');
+    addNotification('😢 هزيمة! تم احتلال كل مقاطعاتك.', 'defeat');
+    localStorage.removeItem(SAVE_KEY);
+  }
+}
+
+function startNewGame() {
+  playClickSound();
+  document.getElementById('startOverlay').classList.add('hidden');
+  localStorage.removeItem(SAVE_KEY);
+  initNewGame();
+  gameState.started = true;
+  setSpeed(1);
+  showToast('🎮 بدأت اللعبة! المس مقاطعة للاختيار');
+  // إظهار التعليمات إذا لم تكتمل من قبل
+  if (!isTutorialDone()) showTutorial();
+}
+
+function resumeGame() {
+  playClickSound();
+  document.getElementById('startOverlay').classList.add('hidden');
+  if (loadGame()) {
+    // إعادة بناء الكاميرا
+    const capital = gameState.provinces.find(p => p.isCapital && p.owner === OWNER_PLAYER) || gameState.provinces[0];
+    centerCamera(capital.centroid.x, capital.centroid.y, true);
+    initInput();
+    updateUI();
+    setSpeed(gameState.speed || 1);
+    showToast('📂 تم تحميل اللعبة المحفوظة!');
+    addNotification('تم استئناف اللعبة المحفوظة', 'info');
+  } else {
+    showToast('❌ فشل تحميل اللعبة المحفوظة!');
+    initNewGame();
+    gameState.started = true;
+    setSpeed(1);
+  }
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ١٩. Minimap (خريطة مصغرة)
+// ════════════════════════════════════════════════════════════════════
+function renderMinimap() {
+  if (!minimapCtx || !gameState || !gameState.provinces.length) return;
+  const mc = minimapCtx;
+  const mw = 150, mh = 100;
+  const sx = mw / MAP_W, sy = mh / MAP_H;
+
+  mc.fillStyle = '#0a0f1a';
+  mc.fillRect(0, 0, mw, mh);
+
+  // رسم المقاطعات كنقاط ملونة
+  for (const prov of gameState.provinces) {
+    const c = prov.centroid;
+    let color;
+    if (prov.owner === OWNER_PLAYER) color = '#3b82f6';
+    else if (prov.owner === OWNER_ENEMY) color = '#ef4444';
+    else color = '#6b7280';
+
+    mc.fillStyle = color;
+    mc.globalAlpha = 0.8;
+    mc.beginPath();
+    // رسم مضلع مصغر
+    for (let j = 0; j < prov.polygon.length; j++) {
+      const px = prov.polygon[j].x * sx, py = prov.polygon[j].y * sy;
+      if (j === 0) mc.moveTo(px, py); else mc.lineTo(px, py);
+    }
+    mc.closePath();
+    mc.fill();
+    mc.globalAlpha = 1;
+  }
+
+  // مؤشر الكاميرا
+  const topLeft = screenToWorld(0, 0);
+  const bottomRight = screenToWorld(canvas.width, canvas.height);
+  mc.strokeStyle = '#d4a844';
+  mc.lineWidth = 1.5;
+  mc.strokeRect(topLeft.x * sx, topLeft.y * sy, (bottomRight.x - topLeft.x) * sx, (bottomRight.y - topLeft.y) * sy);
+}
+
+function handleMinimapClick(event) {
+  const rect = document.getElementById('minimapContainer').getBoundingClientRect();
+  const mx = event.clientX - rect.left;
+  const my = event.clientY - rect.top;
+  // تحويل إحداثيات Minimap إلى إحداثيات العالم
+  const worldX = (mx / 150) * MAP_W;
+  const worldY = (my / 100) * MAP_H;
+  playClickSound();
+  centerCamera(worldX, worldY, true);
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ٢٠. محرك الرسم (Canvas Renderer)
+// ════════════════════════════════════════════════════════════════════
+let lastRenderTime = 0;
+
+function resizeCanvas() {
+  const area = document.getElementById('gameArea');
+  canvas.width = area.clientWidth;
+  canvas.height = area.clientHeight;
+}
+
+function render(timestamp) {
+  // === تحسين الأداء: تقليل frame rate عند عدم ظهور التبويب ===
+  if (document.hidden) {
+    requestAnimationFrame(render);
+    return;
+  }
+  // Throttle to ~30fps when not actively needed
+  if (timestamp - lastRenderTime < 30) {
+    requestAnimationFrame(render);
+    return;
+  }
+  lastRenderTime = timestamp;
+
+  updateCamera();
+  updateCombatAnimations();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#0a0f1a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  drawGrid();
+  drawProvinces();
+  drawLabels();
+
+  if (gameState.mode === 'move' && gameState.moveFrom >= 0) drawMoveIndicators();
+
+  // رسم Minimap
+  renderMinimap();
+
+  requestAnimationFrame(render);
+}
+
+function drawGrid() {
+  ctx.strokeStyle = 'rgba(30,58,95,0.15)';
+  ctx.lineWidth = 0.5;
+  const step = 100;
+  const topLeft = screenToWorld(0, 0);
+  const bottomRight = screenToWorld(canvas.width, canvas.height);
+  const startX = Math.floor(topLeft.x / step) * step;
+  const startY = Math.floor(topLeft.y / step) * step;
+  for (let x = startX; x <= bottomRight.x; x += step) {
+    const s1 = worldToScreen(x, topLeft.y), s2 = worldToScreen(x, bottomRight.y);
+    ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
+  }
+  for (let y = startY; y <= bottomRight.y; y += step) {
+    const s1 = worldToScreen(topLeft.x, y), s2 = worldToScreen(bottomRight.x, y);
+    ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
+  }
+}
+
+function drawProvinces() {
+  const now = Date.now();
+  const topLeft = screenToWorld(0, 0);
+  const bottomRight = screenToWorld(canvas.width, canvas.height);
+  // === Frustum Culling: لا ترسم المقاطعات خارج الشاشة ===
+  const viewMargin = 200;
+
+  for (let i = 0; i < gameState.provinces.length; i++) {
+    const prov = gameState.provinces[i];
+    // Quick bounds check
+    const c = prov.centroid;
+    if (c.x < topLeft.x - viewMargin || c.x > bottomRight.x + viewMargin ||
+        c.y < topLeft.y - viewMargin || c.y > bottomRight.y + viewMargin) continue;
+
+    const poly = prov.polygon;
+    const colors = OWNER_COLORS[prov.owner];
+    const isSelected = gameState.selectedProvince === i;
+    const screenPoly = poly.map(v => worldToScreen(v.x, v.y));
+    const terrainColor = TERRAINS[prov.terrain].color;
+
+    ctx.beginPath();
+    ctx.moveTo(screenPoly[0].x, screenPoly[0].y);
+    for (let j = 1; j < screenPoly.length; j++) ctx.lineTo(screenPoly[j].x, screenPoly[j].y);
+    ctx.closePath();
+
+    // تأثير وميض القتال
+    let combatFlash = null;
+    for (const anim of combatAnimations) {
+      if (anim.provId === i && anim.type.startsWith('flash')) {
+        const elapsed = now - anim.startTime;
+        const alpha = 1 - elapsed / anim.duration;
+        combatFlash = anim.type === 'flash-red'
+          ? `rgba(239,68,68,${alpha * 0.5})`
+          : `rgba(74,222,128,${alpha * 0.5})`;
+      }
+    }
+
+    ctx.fillStyle = colors.fill;
+    ctx.fill();
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = terrainColor;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // رسم أيقونات تضاريس صغيرة متفرقة
+    if (camera.zoom > 0.4) {
+      drawTerrainIcons(prov, screenPoly);
+    }
+
+    // حركة الوميض
+    if (combatFlash) {
+      ctx.fillStyle = combatFlash;
+      ctx.fill();
+    }
+
+    // حدود المقاطعة
+    ctx.strokeStyle = colors.stroke;
+    ctx.lineWidth = isSelected ? 3 : 1.5;
+    ctx.stroke();
+
+    // تأثير التحديد
+    if (isSelected) {
+      ctx.shadowColor = '#d4a844'; ctx.shadowBlur = 15;
+      ctx.strokeStyle = '#d4a844'; ctx.lineWidth = 2;
+      ctx.stroke(); ctx.shadowBlur = 0;
+    }
+
+    // === حدود نابضة للعاصمة ===
+    if (prov.isCapital && prov.owner === OWNER_PLAYER) {
+      const pulseAlpha = 0.4 + 0.6 * Math.abs(Math.sin(now / 500));
+      ctx.strokeStyle = `rgba(212,168,68,${pulseAlpha})`;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+  }
+}
+
+// رسم أيقونات التضاريس المتفرقة داخل المقاطعة
+function drawTerrainIcons(prov, screenPoly) {
+  const terrain = TERRAINS[prov.terrain];
+  if (!terrain.icon || prov.terrain === 'plains') return;
+  // رسم 1-3 أيقونات صغيرة
+  const seed = prov.id * 7;
+  const count = 1 + (seed % 3);
+  ctx.font = `${Math.max(6, 8 * camera.zoom)}px sans-serif`;
+  ctx.globalAlpha = 0.3;
+  for (let k = 0; k < count; k++) {
+    // وضع عشوائي ثابت
+    const offset = ((seed + k * 31) % 100) / 100;
+    const idx = Math.floor(offset * screenPoly.length);
+    const next = (idx + 1) % screenPoly.length;
+    const px = screenPoly[idx].x + (screenPoly[next].x - screenPoly[idx].x) * ((seed + k * 17) % 50) / 50;
+    const py = screenPoly[idx].y + (screenPoly[next].y - screenPoly[idx].y) * ((seed + k * 23) % 50) / 50;
+    ctx.fillText(terrain.icon, px, py);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawLabels() {
+  const hasEspionage = gameState.tech.player.completed.espion;
+  const now = Date.now();
+  const topLeft = screenToWorld(0, 0);
+  const bottomRight = screenToWorld(canvas.width, canvas.height);
+
+  for (let i = 0; i < gameState.provinces.length; i++) {
+    const prov = gameState.provinces[i];
+    const s = worldToScreen(prov.centroid.x, prov.centroid.y);
+    if (s.x < -100 || s.x > canvas.width + 100 || s.y < -50 || s.y > canvas.height + 50) continue;
+
+    const terrain = TERRAINS[prov.terrain];
+    const fontSize = Math.max(8, Math.min(12, 10 * camera.zoom));
+
+    // اسم المقاطعة
+    ctx.font = `bold ${fontSize}px 'Segoe UI',Tahoma,Arial,sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const nameWidth = ctx.measureText(prov.name).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(s.x - nameWidth / 2 - 3, s.y - fontSize - 2, nameWidth + 6, fontSize + 4);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillText(prov.name + (prov.isCapital ? ' ⭐' : ''), s.x, s.y - fontSize / 2);
+
+    // أيقونة التضاريس
+    const iconSize = Math.max(8, Math.min(14, 12 * camera.zoom));
+    ctx.font = `${iconSize}px sans-serif`;
+    ctx.fillText(terrain.icon, s.x, s.y + fontSize / 2 + iconSize / 2);
+
+    // === Fog of War: إظهار "?" بدلاً من القوات للعدو بدون تجسس ===
+    const totalTroops = prov.garrison.infantry + prov.garrison.tanks + prov.garrison.artillery;
+    if (totalTroops > 0) {
+      const showTroops = prov.owner === OWNER_PLAYER || prov.owner === OWNER_NEUTRAL || hasEspionage;
+      const troopFontSize = Math.max(7, Math.min(11, 9 * camera.zoom));
+
+      if (showTroops) {
+        // شارات عسكرية للقوات
+        const inf = prov.garrison.infantry, tnk = prov.garrison.tanks, art = prov.garrison.artillery;
+        const troopText = `🗡️${inf} 🔥${tnk} 💥${art}`;
+        const shortText = `⚔️${totalTroops}`;
+        const displayText = camera.zoom > 0.6 ? troopText : shortText;
+
+        ctx.font = `bold ${troopFontSize}px 'Segoe UI',Tahoma,Arial,sans-serif`;
+        const tw = ctx.measureText(displayText).width;
+
+        // خلفية الشارة
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        const badgeH = troopFontSize + 6;
+        const badgeW = tw + 10;
+        const badgeY = s.y + fontSize + iconSize / 2 + 2;
+        // رسم شارة بزوايا مستديرة
+        const bx = s.x - badgeW / 2, by = badgeY;
+        ctx.beginPath();
+        ctx.roundRect(bx, by, badgeW, badgeH, 3);
+        ctx.fill();
+
+        // لون حسب المالك
+        ctx.fillStyle = prov.owner === OWNER_PLAYER ? '#60a5fa' : prov.owner === OWNER_ENEMY ? '#f87171' : '#9ca3af';
+        ctx.fillText(displayText, s.x, badgeY + troopFontSize / 2 + 3);
+      } else {
+        // حجب القوات (بدون أبحاث التجسس)
+        ctx.font = `bold ${troopFontSize}px 'Segoe UI',Tahoma,Arial,sans-serif`;
+        ctx.fillStyle = '#ef4444';
+        ctx.fillText('❓', s.x, s.y + fontSize + iconSize / 2 + troopFontSize / 2 + 4);
+      }
+    }
+
+    // مؤشر التجنيد
+    if (prov.recruiting) {
+      const rFontSize = Math.max(6, Math.min(10, 8 * camera.zoom));
+      ctx.font = `${rFontSize}px sans-serif`;
+      ctx.fillText('🔨', s.x + 20 * camera.zoom, s.y);
+    }
+  }
+}
+
+function drawMoveIndicators() {
+  const fromProv = gameState.provinces[gameState.moveFrom];
+  for (const adjId of fromProv.adjacent) {
+    const adj = gameState.provinces[adjId];
+    const poly = adj.polygon.map(v => worldToScreen(v.x, v.y));
+    const isFriendly = adj.owner === fromProv.owner;
+    ctx.beginPath();
+    ctx.moveTo(poly[0].x, poly[0].y);
+    for (let j = 1; j < poly.length; j++) ctx.lineTo(poly[j].x, poly[j].y);
+    ctx.closePath();
+    ctx.fillStyle = isFriendly ? 'rgba(74,124,89,0.3)' : 'rgba(220,38,38,0.3)';
+    ctx.fill();
+    ctx.strokeStyle = isFriendly ? 'rgba(74,124,89,0.8)' : 'rgba(220,38,38,0.8)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
+}
+
+// ================================================================
+// ════════════════════════════════════════════════════════════════════
+//  ٢١. تهيئة اللعبة
+// ════════════════════════════════════════════════════════════════════
+function initNewGame() {
+  canvas = document.getElementById('gameCanvas');
+  ctx = canvas.getContext('2d');
+  minimapCanvas = document.getElementById('minimapCanvas');
+  minimapCtx = minimapCanvas.getContext('2d');
+
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  cachedVoronoi = null; // إعادة توليد الخريطة
+  _seed = 42;
+
+  gameState = createGameState();
+
+  const { points, names } = generateSeedPoints();
+  const voronoiPolys = generateVoronoi(points);
+  computeAdjacency(voronoiPolys);
+
+  for (let i = 0; i < voronoiPolys.length; i++) {
+    const vp = voronoiPolys[i];
+    const nameData = names[i];
+    const terrain = assignTerrain(vp.centroid);
+
+    let garrison = { infantry: 0, tanks: 0, artillery: 0 };
+    if (nameData.owner === OWNER_PLAYER) {
+      if (i === 0) {
+        garrison = { infantry: 50, tanks: 10, artillery: 5 };
+      } else {
+        garrison = { infantry: randInt(10, 20), tanks: randInt(0, 5), artillery: randInt(0, 2) };
+      }
+    } else if (nameData.owner === OWNER_ENEMY) {
+      if (i === 15) {
+        garrison = { infantry: 50, tanks: 10, artillery: 5 };
+      } else {
+        garrison = { infantry: randInt(10, 20), tanks: randInt(0, 5), artillery: randInt(0, 2) };
+      }
+    } else {
+      // === قوات محايدة أقل: 3-10 بدلاً من 5-15 ===
+      garrison = { infantry: randInt(3, 10), tanks: 0, artillery: 0 };
+    }
+
+    gameState.provinces.push({
+      id: i,
+      name: nameData.name,
+      terrain: terrain,
+      owner: nameData.owner,
+      polygon: vp.vertices,
+      centroid: vp.centroid,
+      adjacent: vp.adjacent,
+      garrison: garrison,
+      buildings: { factory: 0, barracks: 0, oilwell: 0, fort: 0, arms: 0 },
+      recruiting: null,
+      seed: vp.seed,
+      isCapital: (i === 0 || i === 15) // عاصمتا اللاعب والعدو
+    });
+  }
+
+  const capital = gameState.provinces[0];
+  centerCamera(capital.centroid.x, capital.centroid.y, true);
+  initInput();
+  updateUI();
+  requestAnimationFrame(render);
+}
+
+function initGame() {
+  canvas = document.getElementById('gameCanvas');
+  ctx = canvas.getContext('2d');
+  minimapCanvas = document.getElementById('minimapCanvas');
+  minimapCtx = minimapCanvas.getContext('2d');
+
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  // التحقق من وجود لعبة محفوظة
+  if (hasSavedGame()) {
+    document.getElementById('resumeBtn').classList.remove('hidden');
+  }
+
+  // إنشاء حالة اللعبة مبدئياً لعرض الخريطة في الخلفية
+  initNewGame();
+  gameState.started = false; // لا تبدأ حتى يضغط المستخدم
+}
+
+// بدء اللعبة عند تحميل الصفحة
+window.addEventListener('load', initGame);
+
+// === إغلاق لوحة الإشعارات عند الضغط خارجها ===
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('notifPanel');
+  const bell = document.getElementById('bellBtn');
+  if (!panel.classList.contains('hidden') && !panel.contains(e.target) && !bell.contains(e.target)) {
+    panel.classList.add('hidden');
+  }
+});
+</script>
+</body>
+</html>
